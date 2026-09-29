@@ -53,7 +53,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val preferencesManager = PreferencesManager(application)
     private val eventRepository = EventRepository(db.pendingEventDao(), db.eventAuditDao())
     val safetyRepository = SafetyRepository(preferencesManager, eventRepository)
-    private val syncRepository = SyncRepository(eventRepository, DefaultRemoteSyncDataSource())
+    private val syncRepository = SyncRepository(eventRepository, org.homeguard.core.data.SupabaseRemoteSyncDataSource())
 
     private val batteryMonitor = BatteryMonitor(application)
     private val connectivityMonitor = ConnectivityMonitor(application) {

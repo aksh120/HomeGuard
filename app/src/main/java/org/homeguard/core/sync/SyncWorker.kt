@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters
 import org.homeguard.HomeGuardApplication
 import org.homeguard.core.data.DefaultRemoteSyncDataSource
 import org.homeguard.core.data.EventRepository
+import org.homeguard.core.data.SupabaseRemoteSyncDataSource
 import org.homeguard.core.data.SyncRepository
 import org.homeguard.core.database.HomeGuardDatabase
 import java.util.concurrent.TimeUnit
@@ -26,7 +27,7 @@ class SyncWorker(
         return try {
             val db = HomeGuardDatabase.getInstance(applicationContext)
             val eventRepository = EventRepository(db.pendingEventDao(), db.eventAuditDao())
-            val syncRepository = SyncRepository(eventRepository, DefaultRemoteSyncDataSource())
+            val syncRepository = SyncRepository(eventRepository, SupabaseRemoteSyncDataSource())
 
             val result = syncRepository.syncPendingEvents()
             if (result.isSuccess) {
