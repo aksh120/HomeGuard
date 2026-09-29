@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.homeguard.core.communication.CommunicationManager
 import org.homeguard.core.communication.CommunicationResult
-import org.homeguard.core.data.DefaultRemoteSyncDataSource
 import org.homeguard.core.data.EventRepository
 import org.homeguard.core.data.SafetyRepository
+import org.homeguard.core.data.SupabaseRemoteSyncDataSource
 import org.homeguard.core.data.SyncRepository
 import org.homeguard.core.database.HomeGuardDatabase
 import org.homeguard.core.datastore.PreferencesManager
@@ -29,6 +29,9 @@ import org.homeguard.core.hardware.EmergencyAlarmManager
 import org.homeguard.core.hardware.TorchManager
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.SafetyStatus
+import org.homeguard.core.sensors.AcousticAlarmDetector
+import org.homeguard.core.sensors.CaregiverBeaconManager
+import org.homeguard.core.sensors.FallAndMotionDetector
 import org.homeguard.core.sync.SyncWorker
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -53,16 +56,45 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val preferencesManager = PreferencesManager(application)
     private val eventRepository = EventRepository(db.pendingEventDao(), db.eventAuditDao())
     val safetyRepository = SafetyRepository(preferencesManager, eventRepository)
-    private val syncRepository = SyncRepository(eventRepository, org.homeguard.core.data.SupabaseRemoteSyncDataSource())
+    private val syncRepository = SyncRepository(eventRepository, SupabaseRemoteSyncDataSource())
 
     private val batteryMonitor = BatteryMonitor(application)
     private val connectivityMonitor = ConnectivityMonitor(application) {
-        // Trigger sync when internet is restored
         SyncWorker.triggerImmediateSync(getApplication())
     }
     private val torchManager = TorchManager(application)
     private val alarmManager = EmergencyAlarmManager(application)
     private val communicationManager = CommunicationManager()
+    private val caregiverBeaconManager = CaregiverBeaconManager(application)
+
+    private val _fallDetectedAlert = MutableStateFlow(false)
+    val fallDetectedAlert: StateFlow<Boolean> = _fallDetectedAlert.asStateFlow()
+
+    private val _smokeAlarmDetectedAlert = MutableStateFlow(false)
+    val smokeAlarmDetectedAlert: StateFlow<Boolean> = _smokeAlarmDetectedAlert.asStateFlow()
+
+    private val fallAndMotionDetector = FallAndMotionDetector(
+        context = application,
+        onFallDetected = {
+            _fallDetectedAlert.value = true
+        },
+        onSignificantMovement = {
+            // Implicit passive check-in when user moves/handles phone at home
+            viewModelScope.launch {
+                val config = appConfig.value
+                safetyRepository.recordCheckIn(config.deviceId)
+            }
+        }
+    )
+
+    private val acousticAlarmDetector = AcousticAlarmDetector(
+        context = application,
+        onAlarmSoundDetected = {
+            _smokeAlarmDetectedAlert.value = true
+        }
+    )
+
+    val isAcousticListening: StateFlow<Boolean> = acousticAlarmDetector.isListening
 
     val safetyStatus: StateFlow<SafetyStatus> = safetyRepository.safetyStatusFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, SafetyStatus.UNKNOWN)
@@ -84,6 +116,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "No recent check-in")
 
+    val lastMotionAgoFormatted: StateFlow<String> = fallAndMotionDetector.telemetry.map { telemetry ->
+        val elapsedMinutes = (System.currentTimeMillis() - telemetry.lastMovementTimestamp) / 60_000L
+        if (elapsedMinutes <= 1) "Just now" else "${elapsedMinutes}m ago"
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "Just now")
+
     val recentEvents = eventRepository.recentAuditsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -102,7 +139,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var countdownJob: Job? = null
 
     init {
-        // Check if onboarding setup is complete
         viewModelScope.launch {
             preferencesManager.appConfigFlow.collect { config ->
                 if (!config.isSetupComplete && _currentDestination.value == NavigationDestination.Home) {
@@ -110,8 +146,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        // Start periodic sync schedule
         SyncWorker.schedulePeriodicSync(application)
+
+        // Start Sensor Engines
+        fallAndMotionDetector.start()
+        acousticAlarmDetector.startListening()
+    }
+
+    fun retryAcousticDetector() {
+        acousticAlarmDetector.startListening()
     }
 
     fun navigateTo(dest: NavigationDestination) {
@@ -122,8 +165,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val config = appConfig.value
             safetyRepository.recordCheckIn(config.deviceId)
+            caregiverBeaconManager.playRadarChirp()
             SyncWorker.triggerImmediateSync(getApplication())
         }
+    }
+
+    fun pingCaregiverBeacon() {
+        viewModelScope.launch {
+            caregiverBeaconManager.playRadarChirp()
+        }
+    }
+
+    fun dismissFallAlert() {
+        _fallDetectedAlert.value = false
+    }
+
+    fun dismissSmokeAlert() {
+        _smokeAlarmDetectedAlert.value = false
     }
 
     fun startEmergencyCountdown() {
@@ -200,6 +258,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     override fun onCleared() {
         super.onCleared()
+        fallAndMotionDetector.stop()
+        acousticAlarmDetector.stopListening()
         batteryMonitor.unregister()
         connectivityMonitor.unregister()
         torchManager.cleanUp()

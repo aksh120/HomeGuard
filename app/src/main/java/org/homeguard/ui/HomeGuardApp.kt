@@ -36,6 +36,10 @@ fun HomeGuardApp(
     val countdownSeconds by viewModel.countdownSeconds.collectAsState()
     val communicationError by viewModel.communicationError.collectAsState()
     val recentEvents by viewModel.recentEvents.collectAsState()
+    val fallDetectedAlert by viewModel.fallDetectedAlert.collectAsState()
+    val smokeAlarmDetectedAlert by viewModel.smokeAlarmDetectedAlert.collectAsState()
+    val lastMotionAgoFormatted by viewModel.lastMotionAgoFormatted.collectAsState()
+    val isAcousticListening by viewModel.isAcousticListening.collectAsState()
 
     // Handle system back navigation safely
     BackHandler(enabled = currentDestination != NavigationDestination.Home) {
@@ -64,12 +68,19 @@ fun HomeGuardApp(
                     connectivityInfo = connectivityInfo,
                     appConfig = appConfig,
                     lastCheckInFormatted = lastCheckInFormatted,
+                    lastMotionAgoFormatted = lastMotionAgoFormatted,
+                    isAcousticListening = isAcousticListening,
                     isTorchOn = isTorchOn,
                     communicationError = communicationError,
+                    fallDetectedAlert = fallDetectedAlert,
+                    smokeAlarmDetectedAlert = smokeAlarmDetectedAlert,
                     onCheckInClick = { viewModel.confirmCheckIn() },
                     onEmergencyClick = { viewModel.startEmergencyCountdown() },
                     onCallPrimaryClick = { viewModel.initiateCallToPrimary(context) },
                     onFlashlightClick = { viewModel.toggleFlashlight() },
+                    onPingBeaconClick = { viewModel.pingCaregiverBeacon() },
+                    onDismissFallAlert = { viewModel.dismissFallAlert() },
+                    onDismissSmokeAlert = { viewModel.dismissSmokeAlert() },
                     onNavigate = { dest -> viewModel.navigateTo(dest) },
                     onDismissError = { viewModel.dismissCommunicationError() }
                 )
