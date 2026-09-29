@@ -1,7 +1,9 @@
 package org.homeguard.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -9,16 +11,24 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Sensors
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,23 +38,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.homeguard.R
-import org.homeguard.core.designsystem.theme.ActionPrimary
-import org.homeguard.core.designsystem.theme.BorderSubtle
-import org.homeguard.core.designsystem.theme.DarkBackground
-import org.homeguard.core.designsystem.theme.DarkSurface
-import org.homeguard.core.designsystem.theme.TextPrimary
-import org.homeguard.core.designsystem.theme.TextSecondary
+import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.ContactInfo
 import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.HomeInfo
 import org.homeguard.core.model.MedicalInfo
-import org.homeguard.ui.components.LargeActionButton
+import org.homeguard.ui.components.CyberButton
+import org.homeguard.ui.components.CyberGlassCard
+import org.homeguard.ui.components.CyberTopAppBar
 
 @Composable
 fun SetupAndSettingsScreen(
@@ -82,196 +93,175 @@ fun SetupAndSettingsScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF060911),
+                        Color(0xFF090D16),
+                        Color(0xFF0D1322)
+                    )
+                )
+            )
+            .statusBarsPadding()
             .verticalScroll(scrollState)
             .padding(20.dp)
     ) {
-        // Header
+        CyberTopAppBar(
+            title = if (isInitialSetup) "INITIALIZATION" else "SENTINEL CONFIG",
+            subtitle = if (isInitialSetup) "AEGIS ARCHITECTURE SETUP" else "SECURITY & HARDWARE PREFERENCES",
+            onBackClick = if (!isInitialSetup) onBackClick else null
+        )
+
+        // SECTION 1: OPERATIONAL MODE
+        CyberFormSectionHeader(icon = Icons.Default.Shield, title = "OPERATIONAL ROLE")
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column {
-                Text(
-                    text = if (isInitialSetup) stringResource(R.string.setup_title) else stringResource(R.string.action_settings),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-                Text(
-                    text = if (isInitialSetup) stringResource(R.string.setup_subtitle) else "Edit device configuration and emergency details.",
-                    fontSize = 14.sp,
-                    color = TextSecondary
-                )
-            }
-            if (!isInitialSetup) {
-                OutlinedButton(onClick = onBackClick) {
-                    Text(text = "Back", color = TextPrimary)
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Device Mode Selector
-        SectionHeader(text = stringResource(R.string.setup_mode_label))
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = DarkSurface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-        ) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    RadioButton(
-                        selected = deviceMode == DeviceMode.PROTECTED_DEVICE,
-                        onClick = { deviceMode = DeviceMode.PROTECTED_DEVICE },
-                        colors = RadioButtonDefaults.colors(selectedColor = ActionPrimary)
-                    )
-                    Text(
-                        text = stringResource(R.string.setup_mode_protected),
-                        color = TextPrimary,
-                        fontSize = 16.sp
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    RadioButton(
-                        selected = deviceMode == DeviceMode.MONITORING_DEVICE,
-                        onClick = { deviceMode = DeviceMode.MONITORING_DEVICE },
-                        colors = RadioButtonDefaults.colors(selectedColor = ActionPrimary)
-                    )
-                    Text(
-                        text = stringResource(R.string.setup_mode_monitoring),
-                        color = TextPrimary,
-                        fontSize = 16.sp
-                    )
-                }
-            }
+            ModeSelectorTile(
+                title = "PROTECTED",
+                subtitle = "Companion HUD",
+                icon = Icons.Default.Shield,
+                isSelected = deviceMode == DeviceMode.PROTECTED_DEVICE,
+                onSelect = { deviceMode = DeviceMode.PROTECTED_DEVICE },
+                modifier = Modifier.weight(1f)
+            )
+            ModeSelectorTile(
+                title = "MONITORING",
+                subtitle = "Caregiver Array",
+                icon = Icons.Default.Sensors,
+                isSelected = deviceMode == DeviceMode.MONITORING_DEVICE,
+                onSelect = { deviceMode = DeviceMode.MONITORING_DEVICE },
+                modifier = Modifier.weight(1f)
+            )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Protected Person
-        SectionHeader(text = stringResource(R.string.setup_protected_person_header))
-        StyledTextField(
-            label = stringResource(R.string.setup_person_name_label),
-            value = personName,
-            onValueChange = { personName = it },
-            placeholder = "e.g. Alex"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.setup_relationship_label),
-            value = personRole,
-            onValueChange = { personRole = it },
-            placeholder = "e.g. Primary Resident, Resident, etc."
-        )
+        // SECTION 2: IDENTITY
+        CyberFormSectionHeader(icon = Icons.Default.Person, title = "RESIDENT & SENTINEL PROFILE")
+        CyberGlassCard {
+            CyberTextField(
+                label = "Protected Person Name",
+                value = personName,
+                onValueChange = { personName = it },
+                placeholder = "e.g. Alex"
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberTextField(
+                label = "Role / Home Status",
+                value = personRole,
+                onValueChange = { personRole = it },
+                placeholder = "e.g. Primary Resident, Resident, Solo"
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Primary Contact
-        SectionHeader(text = stringResource(R.string.info_primary_contact))
-        StyledTextField(
-            label = "Primary Contact Name",
-            value = primaryContactName,
-            onValueChange = { primaryContactName = it },
-            placeholder = "e.g. Jordan"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = "Phone Number / Communication Link",
-            value = primaryContactPhone,
-            onValueChange = { primaryContactPhone = it },
-            placeholder = "+1 555 0199 or https://..."
-        )
+        // SECTION 3: EMERGENCY DISPATCH CONTACTS
+        CyberFormSectionHeader(icon = Icons.Default.Phone, title = "COMMUNICATION DISPATCH LINKS")
+        CyberGlassCard {
+            CyberTextField(
+                label = "Primary Contact Name",
+                value = primaryContactName,
+                onValueChange = { primaryContactName = it },
+                placeholder = "e.g. Jordan"
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = "Primary Phone / Webhook URL",
+                value = primaryContactPhone,
+                onValueChange = { primaryContactPhone = it },
+                placeholder = "+1 555 0199 or https://..."
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            CyberTextField(
+                label = "Secondary Contact (Optional)",
+                value = secondaryContactPhone,
+                onValueChange = { secondaryContactPhone = it },
+                placeholder = "+1 555 0188"
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = "Local Emergency Dispatch Number",
+                value = localEmergencyNumber,
+                onValueChange = { localEmergencyNumber = it },
+                placeholder = "e.g. 911, 112, 999"
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Secondary & Emergency Contacts
-        SectionHeader(text = "Secondary & Emergency Contacts")
-        StyledTextField(
-            label = "Secondary Contact (Name & Phone)",
-            value = secondaryContactPhone,
-            onValueChange = { secondaryContactPhone = it },
-            placeholder = "+1 555 0188"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.setup_emergency_number_label),
-            value = localEmergencyNumber,
-            onValueChange = { localEmergencyNumber = it },
-            placeholder = "e.g. 911, 112, 999, etc."
-        )
+        // SECTION 4: PHYSICAL ADDRESS & ACCESS
+        CyberFormSectionHeader(icon = Icons.Default.Home, title = "LOCATION & PHYSICAL ACCESS")
+        CyberGlassCard {
+            CyberTextField(
+                label = "Physical Address / Apartment",
+                value = homeAddress,
+                onValueChange = { homeAddress = it },
+                placeholder = "Street address, Apartment / Unit"
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = "Building Security Contact",
+                value = buildingSecurity,
+                onValueChange = { buildingSecurity = it },
+                placeholder = "Security desk or building manager"
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = "Access Instructions / Gate Code",
+                value = accessInstructions,
+                onValueChange = { accessInstructions = it },
+                placeholder = "Gate pin, keybox safe, instructions"
+            )
+        }
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Home Information
-        SectionHeader(text = stringResource(R.string.info_home_header))
-        StyledTextField(
-            label = stringResource(R.string.info_home_address),
-            value = homeAddress,
-            onValueChange = { homeAddress = it },
-            placeholder = "Street address, Apartment / Unit"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.info_building_security),
-            value = buildingSecurity,
-            onValueChange = { buildingSecurity = it },
-            placeholder = "Security desk or building manager contact"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.info_home_instructions),
-            value = accessInstructions,
-            onValueChange = { accessInstructions = it },
-            placeholder = "Gate code, key safe location, access instructions"
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Optional Medical
-        SectionHeader(text = stringResource(R.string.info_medical_header))
-        StyledTextField(
-            label = stringResource(R.string.info_blood_group),
-            value = bloodGroup,
-            onValueChange = { bloodGroup = it },
-            placeholder = "e.g. O+, A-, etc."
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.info_allergies),
-            value = allergies,
-            onValueChange = { allergies = it },
-            placeholder = "e.g. Penicillin, Latex, None"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.info_medications),
-            value = medications,
-            onValueChange = { medications = it },
-            placeholder = "Daily medications or critical prescriptions"
-        )
-        Spacer(modifier = Modifier.height(10.dp))
-        StyledTextField(
-            label = stringResource(R.string.info_doctor),
-            value = doctorContact,
-            onValueChange = { doctorContact = it },
-            placeholder = "Dr. Smith / Community Clinic (+1 555...)"
-        )
+        // SECTION 5: BIOMETRIC / MEDICAL (OPTIONAL)
+        CyberFormSectionHeader(icon = Icons.Default.MedicalServices, title = "BIOMETRICS & MEDICAL (OPTIONAL)")
+        CyberGlassCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CyberTextField(
+                    label = "Blood Group",
+                    value = bloodGroup,
+                    onValueChange = { bloodGroup = it },
+                    placeholder = "e.g. O+, A-",
+                    modifier = Modifier.weight(1f)
+                )
+                CyberTextField(
+                    label = "Known Allergies",
+                    value = allergies,
+                    onValueChange = { allergies = it },
+                    placeholder = "e.g. Penicillin",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = "Critical Medications",
+                value = medications,
+                onValueChange = { medications = it },
+                placeholder = "Daily medications or insulin prescriptions"
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = "Primary Physician Contact",
+                value = doctorContact,
+                onValueChange = { doctorContact = it },
+                placeholder = "Dr. Miller / Clinic (+1 555...)"
+            )
+        }
 
         Spacer(modifier = Modifier.height(28.dp))
 
-        // Save / Complete Setup Button
-        LargeActionButton(
-            text = if (isInitialSetup) stringResource(R.string.setup_complete_button) else stringResource(R.string.action_save),
+        // Commit Config Button
+        CyberButton(
+            text = if (isInitialSetup) "INITIALIZE SENTINEL CORE" else "COMMIT CONFIGURATION",
             onClick = {
                 val updatedConfig = currentConfig.copy(
                     isSetupComplete = true,
@@ -297,10 +287,9 @@ fun SetupAndSettingsScreen(
                 onSaveConfig(updatedConfig)
                 onBackClick()
             },
-            backgroundColor = ActionPrimary,
-            borderColor = ActionPrimary,
-            textColor = androidx.compose.ui.graphics.Color.White,
-            minHeight = 68
+            accentColor = Color(0xFF10B981),
+            icon = Icons.Default.Check,
+            minHeight = 64
         )
 
         Spacer(modifier = Modifier.height(30.dp))
@@ -308,39 +297,114 @@ fun SetupAndSettingsScreen(
 }
 
 @Composable
-private fun SectionHeader(text: String) {
-    Text(
-        text = text,
-        fontSize = 17.sp,
-        fontWeight = FontWeight.Bold,
-        color = TextPrimary,
-        modifier = Modifier.padding(bottom = 6.dp)
-    )
+private fun ModeSelectorTile(
+    title: String,
+    subtitle: String,
+    icon: ImageVector,
+    isSelected: Boolean,
+    onSelect: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val borderColor = if (isSelected) Color(0xFF10B981) else Color(0xFF1E293B)
+    val bgColor = if (isSelected) Color(0xFF0A2218) else Color(0xFF0B101B)
+    val iconColor = if (isSelected) Color(0xFF10B981) else Color(0xFF64748B)
+
+    Surface(
+        onClick = onSelect,
+        modifier = modifier.height(72.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = bgColor,
+        border = androidx.compose.foundation.BorderStroke(1.5.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(iconColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 0.5.sp,
+                    maxLines = 1,
+                    color = if (isSelected) Color.White else Color(0xFF94A3B8)
+                )
+                Text(
+                    text = subtitle,
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    color = if (isSelected) Color(0xFF10B981) else Color(0xFF64748B)
+                )
+            }
+        }
+    }
 }
 
 @Composable
-private fun StyledTextField(
+private fun CyberFormSectionHeader(icon: ImageVector, title: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(bottom = 8.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = Color(0xFF10B981),
+            modifier = Modifier.size(15.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = title,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp,
+            color = Color(0xFF94A3B8)
+        )
+    }
+}
+
+@Composable
+private fun CyberTextField(
     label: String,
     value: String,
     onValueChange: (String) -> Unit,
-    placeholder: String = ""
+    placeholder: String = "",
+    modifier: Modifier = Modifier
 ) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(text = label) },
-        placeholder = { Text(text = placeholder, color = TextSecondary) },
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
+        label = { Text(text = label, fontSize = 13.sp) },
+        placeholder = { Text(text = placeholder, color = Color(0xFF475569), fontSize = 13.sp) },
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = TextPrimary,
-            unfocusedTextColor = TextPrimary,
-            focusedContainerColor = DarkSurface,
-            unfocusedContainerColor = DarkSurface,
-            focusedBorderColor = ActionPrimary,
-            unfocusedBorderColor = BorderSubtle,
-            focusedLabelColor = ActionPrimary,
-            unfocusedLabelColor = TextSecondary
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
+            focusedContainerColor = Color(0xFF0F172A).copy(alpha = 0.6f),
+            unfocusedContainerColor = Color(0xFF0B101B),
+            focusedBorderColor = Color(0xFF10B981),
+            unfocusedBorderColor = Color(0xFF1E293B),
+            focusedLabelColor = Color(0xFF10B981),
+            unfocusedLabelColor = Color(0xFF64748B)
         ),
         singleLine = true
     )

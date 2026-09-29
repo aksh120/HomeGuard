@@ -27,10 +27,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
@@ -543,6 +547,233 @@ private fun CockpitTile(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+        }
+    }
+}
+
+@Composable
+fun CyberTopAppBar(
+    title: String,
+    subtitle: String? = null,
+    onBackClick: (() -> Unit)? = null,
+    action: (@Composable () -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f, fill = false)
+        ) {
+            if (onBackClick != null) {
+                Surface(
+                    onClick = onBackClick,
+                    modifier = Modifier.size(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFF0F172A),
+                    border = BorderStroke(1.dp, Color(0xFF1E293B))
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+            }
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.sp,
+                    color = Color.White
+                )
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        color = Color(0xFF10B981)
+                    )
+                }
+            }
+        }
+        if (action != null) {
+            action()
+        }
+    }
+}
+
+@Composable
+fun CyberGlassCard(
+    modifier: Modifier = Modifier,
+    borderColor: Color = Color(0xFF1E293B),
+    backgroundColor: Color = Color(0xFF0B101B),
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = shape,
+        color = backgroundColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+fun CyberButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    accentColor: Color = Color(0xFF10B981),
+    icon: ImageVector? = null,
+    isSecondary: Boolean = false,
+    minHeight: Int = 54
+) {
+    val bg = if (isSecondary) Color(0xFF0F172A) else accentColor.copy(alpha = 0.16f)
+    val border = if (isSecondary) Color(0xFF1E293B) else accentColor.copy(alpha = 0.6f)
+    val textColor = if (isSecondary) Color(0xFFCBD5E1) else accentColor
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier
+            .fillMaxWidth()
+            .height(minHeight.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = bg,
+        border = BorderStroke(1.dp, border)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+            }
+            Text(
+                text = text,
+                color = textColor,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun CyberBadge(
+    text: String,
+    color: Color,
+    icon: ImageVector? = null,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = color.copy(alpha = 0.12f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.35f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(12.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+            }
+            Text(
+                text = text,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                letterSpacing = 0.5.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun CyberActionTile(
+    icon: ImageVector,
+    title: String,
+    status: String,
+    accentColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(72.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF0F172A),
+        border = BorderStroke(1.dp, Color(0xFF1E293B))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = 0.5.sp,
+                    color = Color.White
+                )
+                Text(
+                    text = status,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = accentColor
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
         }
     }
 }

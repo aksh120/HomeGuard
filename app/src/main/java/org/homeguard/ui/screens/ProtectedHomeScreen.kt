@@ -73,6 +73,7 @@ import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.SafetyStatus
 import org.homeguard.ui.NavigationDestination
+import org.homeguard.ui.components.CyberActionTile
 import org.homeguard.ui.components.CyberAegisHeroOrb
 import org.homeguard.ui.components.TactileHoldSosRadial
 import org.homeguard.ui.components.TelemetryCockpitHUD
@@ -439,61 +440,5 @@ fun ProtectedHomeScreen(
             },
             containerColor = DarkSurface
         )
-    }
-}
-
-@Composable
-private fun CyberActionTile(
-    icon: ImageVector,
-    title: String,
-    status: String,
-    accentColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(72.dp),
-        shape = RoundedCornerShape(14.dp),
-        color = Color(0xFF0F172A),
-        border = BorderStroke(1.dp, Color(0xFF1E293B))
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.5.sp,
-                    color = Color.White
-                )
-                Text(
-                    text = status,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = accentColor
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(accentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
     }
 }

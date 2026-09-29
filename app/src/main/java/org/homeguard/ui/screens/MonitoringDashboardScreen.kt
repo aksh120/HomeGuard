@@ -1,6 +1,7 @@
 package org.homeguard.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,48 +12,45 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.BatteryFull
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Help
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.SignalWifi4Bar
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.homeguard.R
 import org.homeguard.core.database.entity.EventAuditEntity
-import org.homeguard.core.designsystem.theme.ActionEmergency
-import org.homeguard.core.designsystem.theme.BorderSubtle
-import org.homeguard.core.designsystem.theme.DarkBackground
-import org.homeguard.core.designsystem.theme.DarkSurface
 import org.homeguard.core.designsystem.theme.StatusEmergency
 import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.designsystem.theme.StatusUnknown
-import org.homeguard.core.designsystem.theme.TextPrimary
-import org.homeguard.core.designsystem.theme.TextSecondary
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.hardware.ConnectivityInfo
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.SafetyStatus
-import org.homeguard.ui.components.SafetyStatusBanner
+import org.homeguard.ui.components.CyberBadge
+import org.homeguard.ui.components.CyberGlassCard
+import org.homeguard.ui.components.CyberTopAppBar
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,127 +70,147 @@ fun MonitoringDashboardScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(DarkBackground)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF060911),
+                        Color(0xFF090D16),
+                        Color(0xFF0D1322)
+                    )
+                )
+            )
+            .statusBarsPadding()
             .verticalScroll(scrollState)
             .padding(20.dp)
     ) {
-        // Header
+        CyberTopAppBar(
+            title = "SENTINEL AUDIT",
+            subtitle = "LIVE TELEMETRY STREAM",
+            onBackClick = onBackClick
+        )
+
+        // Monitored Person Sentinel Dossier Card
+        val personName = appConfig.personName.ifBlank { "Protected Person" }
+        val personRole = appConfig.personRole.ifBlank { "Resident" }
+
+        CyberGlassCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF0F172A))
+                            .border(1.dp, Color(0xFF10B981).copy(alpha = 0.4f), RoundedCornerShape(12.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = Color(0xFF10B981),
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = personName,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color.White
+                        )
+                        Text(
+                            text = "ROLE: ${personRole.uppercase()}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF64748B),
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+                }
+
+                val (statusText, statusColor) = when (safetyStatus) {
+                    SafetyStatus.SAFE -> "SAFE" to StatusSafe
+                    SafetyStatus.UNKNOWN -> "PENDING" to StatusUnknown
+                    SafetyStatus.EMERGENCY -> "ALERT" to StatusEmergency
+                }
+                CyberBadge(text = statusText, color = statusColor)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Device Telemetry Array Cards
+        Text(
+            text = "HARDWARE & MESH TELEMETRY",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp,
+            color = Color(0xFF64748B),
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBackClick) {
-                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back", tint = TextPrimary)
-                }
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = stringResource(R.string.dashboard_title),
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary
-                )
-            }
+            AuditTelemetryTile(
+                title = "NETWORK",
+                value = if (connectivityInfo.isInternetAvailable) "Online" else "Local Mesh",
+                sub = if (connectivityInfo.isWifiConnected) "Wi-Fi Connected" else "Cellular/Offline",
+                color = if (connectivityInfo.isInternetAvailable) Color(0xFF38BDF8) else StatusUnknown,
+                icon = Icons.Default.Wifi,
+                modifier = Modifier.weight(1f)
+            )
+
+            AuditTelemetryTile(
+                title = "BATTERY",
+                value = "${batteryInfo.level}%",
+                sub = if (batteryInfo.isCharging) "Charging" else "Unplugged",
+                color = if (batteryInfo.level <= 20) StatusEmergency else StatusSafe,
+                icon = Icons.Default.Bolt,
+                modifier = Modifier.weight(1f)
+            )
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Monitored Person Header
-        val personName = appConfig.personName.ifBlank { "Protected Person" }
-        val personRole = appConfig.personRole.ifBlank { "Home" }
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            color = DarkSurface,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = personName,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextPrimary
-                    )
-                    Text(
-                        text = "Role: $personRole",
-                        fontSize = 14.sp,
-                        color = TextSecondary
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Safety Status Banner
-        SafetyStatusBanner(status = safetyStatus)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Device Telemetry Cards Grid
-        TelemetryCard(
-            title = stringResource(R.string.dashboard_device_state),
-            value = if (connectivityInfo.isInternetAvailable) stringResource(R.string.dashboard_online) else stringResource(R.string.dashboard_offline),
-            color = if (connectivityInfo.isInternetAvailable) StatusSafe else StatusUnknown
-        )
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        TelemetryCard(
-            title = "Last Safety Check-in",
+        AuditTelemetryTile(
+            title = "LAST VERIFIED SAFETY CHECK-IN",
             value = lastCheckInFormatted,
-            color = TextPrimary
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        TelemetryCard(
-            title = "Battery Telemetry",
-            value = "${batteryInfo.level}% (${if (batteryInfo.isCharging) "Charging" else "Unplugged"})",
-            color = if (batteryInfo.level <= 20) StatusEmergency else TextPrimary
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        TelemetryCard(
-            title = "Network Connectivity",
-            value = if (connectivityInfo.isWifiConnected) "Wi-Fi Connected" else "Wi-Fi Disconnected",
-            color = if (connectivityInfo.isWifiConnected) StatusSafe else StatusUnknown
+            sub = "Synchronized with local encrypted SQLite Room log",
+            color = Color(0xFF10B981),
+            icon = Icons.Default.Sensors,
+            modifier = Modifier.fillMaxWidth()
         )
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Recent Audit Events
+        // Recent Audit Events Timeline
         Text(
-            text = stringResource(R.string.dashboard_recent_events),
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextPrimary
+            text = "IMMUTABLE AUDIT TRAIL",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp,
+            color = Color(0xFF64748B),
+            modifier = Modifier.padding(bottom = 10.dp)
         )
 
-        Spacer(modifier = Modifier.height(12.dp))
-
         if (recentEvents.isEmpty()) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                color = DarkSurface
-            ) {
+            CyberGlassCard {
                 Text(
-                    text = stringResource(R.string.dashboard_no_events),
-                    color = TextSecondary,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(16.dp)
+                    text = "No recorded safety events in local storage. All systems nominal.",
+                    color = Color(0xFF64748B),
+                    fontSize = 13.sp
                 )
             }
         } else {
-            recentEvents.take(10).forEach { event ->
-                EventAuditRow(event = event)
+            recentEvents.take(12).forEach { event ->
+                CyberEventRow(event = event)
                 Spacer(modifier = Modifier.height(8.dp))
             }
         }
@@ -202,58 +220,105 @@ fun MonitoringDashboardScreen(
 }
 
 @Composable
-private fun TelemetryCard(title: String, value: String, color: androidx.compose.ui.graphics.Color) {
+private fun AuditTelemetryTile(
+    title: String,
+    value: String,
+    sub: String,
+    color: Color,
+    icon: ImageVector,
+    modifier: Modifier = Modifier
+) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = DarkSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        color = Color(0xFF0B101B),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(text = title, fontSize = 15.sp, color = TextSecondary)
-            Text(text = value, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = color)
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                    color = Color(0xFF94A3B8)
+                )
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = color,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = value,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White
+            )
+            Text(
+                text = sub,
+                fontSize = 11.sp,
+                color = Color(0xFF64748B)
+            )
         }
     }
 }
 
 @Composable
-private fun EventAuditRow(event: EventAuditEntity) {
-    val sdf = SimpleDateFormat("h:mm a", Locale.getDefault())
+private fun CyberEventRow(event: EventAuditEntity) {
+    val sdf = SimpleDateFormat("h:mm a, MMM d", Locale.getDefault())
     val formattedTime = sdf.format(Date(event.timestamp))
+
+    val isAlert = event.eventType == "EMERGENCY_SOS" || event.eventType.contains("ALERT")
+    val accentColor = if (isAlert) StatusEmergency else Color(0xFF10B981)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        color = DarkSurface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, BorderSubtle)
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, if (isAlert) StatusEmergency.copy(alpha = 0.4f) else Color(0xFF1E293B))
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = formattedTime,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextSecondary,
-                modifier = Modifier.width(68.dp)
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(accentColor)
             )
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = event.summary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (event.eventType == "EMERGENCY_SOS") StatusEmergency else TextPrimary
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = event.summary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isAlert) StatusEmergency else Color.White
+                    )
+                    Text(
+                        text = formattedTime,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF64748B)
+                    )
+                }
                 if (!event.details.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
                     Text(
                         text = event.details,
                         fontSize = 12.sp,
-                        color = TextSecondary
+                        color = Color(0xFF94A3B8)
                     )
                 }
             }
