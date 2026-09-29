@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HomeGuard - Logo Design Showcase</title>
+  <style>
+    :root {
+      --bg: #090D16;
+      --surface: #111827;
+      --surface-border: #1F2937;
+      --text-main: #F9FAFB;
+      --text-muted: #9CA3AF;
+      --accent: #10B981;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding: 48px 24px;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 56px;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34D399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 6px 16px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: 42px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      margin-bottom: 12px;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 18px;
+      max-width: 650px;
+      margin: 0 auto;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+      gap: 32px;
+      margin-bottom: 64px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      border-radius: 20px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(16, 185, 129, 0.4);
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+    }
+
+    .logo-frame {
+      width: 190px;
+      height: 190px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-frame img {
+      width: 100%;
+      height: 100%;
+      filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.5));
+    }
+
+    .card-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+
+    .card-tag {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .card-desc {
+      color: var(--text-muted);
+      font-size: 14px;
+      text-align: center;
+      line-height: 1.5;
+      margin-bottom: 20px;
+    }
+
+    .scale-test {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 12px 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      width: 100%;
+    }
+
+    .scale-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .scale-item span {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .phone-mockup-section {
+      background: linear-gradient(180deg, #111827 0%, #0B0F19 100%);
+      border: 1px solid var(--surface-border);
+      border-radius: 24px;
+      padding: 48px;
+      text-align: center;
+      margin-top: 40px;
+    }
+
+    .phone-mockup-section h2 {
+      font-size: 28px;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .phone-mockup-section p {
+      color: var(--text-muted);
+      margin-bottom: 36px;
+    }
+
+    .app-icon-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 28px;
+    }
+
+    .app-icon-preview {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .app-icon-squircle {
+      width: 72px;
+      height: 72px;
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6);
+      transition: transform 0.2s;
+    }
+
+    .app-icon-squircle:hover {
+      transform: scale(1.08);
+    }
+
+    .app-icon-squircle img {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .app-icon-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="badge">Branding &amp; Visual Identity</div>
+      <h1>HomeGuard Brand Marks</h1>
+      <p class="subtitle">Six distinct, modern, non-AI vector logo concepts crafted with geometric precision, strong silhouette clarity, and timeless safety symbolism.</p>
+    </header>
+
+    <div class="grid">
+      <!-- Option 1 -->
+      <div class="card">
+        <div class="card-tag">Concept 01</div>
+        <div class="logo-frame">
+          <img src="logo_1_architectural_shield.svg" alt="Architectural Shield">
+        </div>
+        <h3 class="card-title">The Architectural Shield</h3>
+        <p class="card-desc">Faceted geometric shield with dual-tone angles evoking a solid pitched roof and an impenetrable safety shelter with a pure hearth beacon at the core.</p>
+        <div class="scale-test">
+          <div class="scale-item">
+            <img src="logo_1_architectural_shield.svg" width="48" height="48">
+            <span>48px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_1_architectural_shield.svg" width="32" height="32">
+            <span>32px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_1_architectural_shield.svg" width="20" height="20">
+            <span>20px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 2 -->
+      <div class="card">
+        <div class="card-tag">Concept 02</div>
+        <div class="logo-frame">
+          <img src="logo_2_continuous_haven.svg" alt="Continuous Haven">
+        </div>
+        <h3 class="card-title">The Continuous Haven</h3>
+        <p class="card-desc">An uninterrupted precision monoline contour. The outer defensive shield boundary seamlessly encloses a minimalist inner architectural house sanctuary.</p>
+        <div class="scale-test">
+          <div class="scale-item">
+            <img src="logo_2_continuous_haven.svg" width="48" height="48">
+            <span>48px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_2_continuous_haven.svg" width="32" height="32">
+            <span>32px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_2_continuous_haven.svg" width="20" height="20">
+            <span>20px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 3 -->
+      <div class="card">
+        <div class="card-tag">Concept 03</div>
+        <div class="logo-frame">
+          <img src="logo_3_negative_space_guardian.svg" alt="Negative Space Guardian">
+        </div>
+        <h3 class="card-title">The Guardian Core</h3>
+        <p class="card-desc">Classic Swiss-style bold silhouette. A solid vibrant emerald shield with negative space sculpting an iconic pitched roof and a central keyhole sentinel beacon.</p>
+        <div class="scale-test">
+          <div class="scale-item">
+            <img src="logo_3_negative_space_guardian.svg" width="48" height="48">
+            <span>48px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_3_negative_space_guardian.svg" width="32" height="32">
+            <span>32px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_3_negative_space_guardian.svg" width="20" height="20">
+            <span>20px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 4 -->
+      <div class="card">
+        <div class="card-tag">Concept 04</div>
+        <div class="logo-frame">
+          <img src="logo_4_sentinel_crest.svg" alt="Sentinel Crest">
+        </div>
+        <h3 class="card-title">The Sentinel Crest</h3>
+        <p class="card-desc">Dual interlocking geometric wings flanking a central home chevron. Symbolizes the cooperative bond between the protected home resident and the trusted monitoring contact.</p>
+        <div class="scale-test">
+          <div class="scale-item">
+            <img src="logo_4_sentinel_crest.svg" width="48" height="48">
+            <span>48px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_4_sentinel_crest.svg" width="32" height="32">
+            <span>32px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_4_sentinel_crest.svg" width="20" height="20">
+            <span>20px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 5 -->
+      <div class="card">
+        <div class="card-tag">Concept 05</div>
+        <div class="logo-frame">
+          <img src="logo_5_safety_beacon.svg" alt="Safety Beacon">
+        </div>
+        <h3 class="card-title">The Safety Beacon</h3>
+        <p class="card-desc">Isometric axonometric haven combining architectural faceting with an optical protective radar arc. Clean Scandinavian / Bauhaus precision engineering.</p>
+        <div class="scale-test">
+          <div class="scale-item">
+            <img src="logo_5_safety_beacon.svg" width="48" height="48">
+            <span>48px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_5_safety_beacon.svg" width="32" height="32">
+            <span>32px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_5_safety_beacon.svg" width="20" height="20">
+            <span>20px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 6 -->
+      <div class="card">
+        <div class="card-tag">Concept 06</div>
+        <div class="logo-frame">
+          <img src="logo_6_kinetic_aegis.svg" alt="Kinetic Aegis">
+        </div>
+        <h3 class="card-title">The Kinetic Aegis</h3>
+        <p class="card-desc">Sleek tactile hardware aesthetic with crisp interlocking chevrons. Forms an aerodynamic shelter with a glowing core beacon for uncompromising safety.</p>
+        <div class="scale-test">
+          <div class="scale-item">
+            <img src="logo_6_kinetic_aegis.svg" width="48" height="48">
+            <span>48px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_6_kinetic_aegis.svg" width="32" height="32">
+            <span>32px</span>
+          </div>
+          <div class="scale-item">
+            <img src="logo_6_kinetic_aegis.svg" width="20" height="20">
+            <span>20px</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Phone App Icon Mockup Preview -->
+    <div class="phone-mockup-section">
+      <h2>Android App Icon Preview</h2>
+      <p>Simulating how each brand mark appears as an adaptive launcher squircle on an Android device:</p>
+      
+      <div class="app-icon-row">
+        <div class="app-icon-preview">
+          <div class="app-icon-squircle">
+            <img src="logo_1_architectural_shield.svg" alt="01">
+          </div>
+          <div class="app-icon-label">01. Architectural</div>
+        </div>
+
+        <div class="app-icon-preview">
+          <div class="app-icon-squircle">
+            <img src="logo_2_continuous_haven.svg" alt="02">
+          </div>
+          <div class="app-icon-label">02. Continuous</div>
+        </div>
+
+        <div class="app-icon-preview">
+          <div class="app-icon-squircle">
+            <img src="logo_3_negative_space_guardian.svg" alt="03">
+          </div>
+          <div class="app-icon-label">03. Guardian</div>
+        </div>
+
+        <div class="app-icon-preview">
+          <div class="app-icon-squircle">
+            <img src="logo_4_sentinel_crest.svg" alt="04">
+          </div>
+          <div class="app-icon-label">04. Sentinel</div>
+        </div>
+
+        <div class="app-icon-preview">
+          <div class="app-icon-squircle">
+            <img src="logo_5_safety_beacon.svg" alt="05">
+          </div>
+          <div class="app-icon-label">05. Beacon</div>
+        </div>
+
+        <div class="app-icon-preview">
+          <div class="app-icon-squircle">
+            <img src="logo_6_kinetic_aegis.svg" alt="06">
+          </div>
+          <div class="app-icon-label">06. Aegis</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</body>
+</html>
