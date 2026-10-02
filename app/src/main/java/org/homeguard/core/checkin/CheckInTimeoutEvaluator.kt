@@ -34,7 +34,9 @@ object CheckInTimeoutEvaluator {
         val promptedAt = lastPromptAt ?: return false
 
         val deadline = promptedAt + graceMinutes.coerceAtLeast(0) * 60_000L
-        if (now < deadline) return false
+        // Consistent with SafetyRepository's expiry test: reaching the deadline exactly is still
+        // inside the window, so only strictly-later counts as missed.
+        if (now <= deadline) return false
 
         // Any confirmation after the prompt cancels the miss.
         if (lastCheckInAt != null && lastCheckInAt >= promptedAt) return false
