@@ -1,0 +1,11 @@
+{
+  "name": "homeguard-tools",
+  "private": true,
+  "description": "Build tooling for HomeGuard. The app itself is a Kotlin/Android project; this exists only to pin the Supabase CLI used to deploy the caregiver notification function.",
+  "scripts": {
+    "supabase": "supabase"
+  },
+  "devDependencies": {
+    "supabase": "^2.119.0"
+  }
+}

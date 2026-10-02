@@ -191,7 +191,7 @@ supabase secrets set RESEND_API_KEY=re_...
 - Add header `Authorization: service_role`
 
 The function is
-[`backend/functions/notify-caregiver/index.ts`](backend/functions/notify-caregiver/index.ts). It
+[`supabase/functions/notify-caregiver/index.ts`](supabase/functions/notify-caregiver/index.ts). It
 reads `RESEND_API_KEY` from a function secret, so no credential is ever shipped in the app.
 
 There is deliberately **no** webhook on `check_ins`: a caregiver does not need an email every

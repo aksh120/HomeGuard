@@ -1,0 +1,14 @@
+# Supabase configuration for HomeGuard
+#
+# Generated so `supabase functions deploy notify-caregiver` works without the
+# --no-verify-jwt flag. That flag is required because a Database Webhook posts
+# with the service role, not a signed user JWT, so there is no JWT for the CLI
+# to verify.
+#
+# Local machine state lives in supabase/.temp/ and is gitignored.
+
+project_id = "supabase"
+
+[functions.notify-caregiver]
+# Database Webhooks authenticate with the service role key, not a user JWT.
+verify_jwt = false

@@ -19,8 +19,9 @@
 -- NOTIFICATION DELIVERY
 -- ---------------------
 -- Delivery is a Supabase Database Webhook on emergency_events, handled by
--- functions/notify-caregiver/index.ts. That keeps the app free of third-party
--- credentials: the phone never holds an email API key, and section 29 forbids shipping secrets.
+-- supabase/functions/notify-caregiver/index.ts. That keeps the app free of
+-- third-party credentials: the phone never holds an email API key, and
+-- section 29 forbids shipping secrets.
 --
 -- Run this file on an EMPTY database, or after 001_rls_ownership.sql has run.
 -- ==============================================================================
