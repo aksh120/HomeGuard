@@ -127,6 +127,44 @@ class SupabaseRemoteSyncDataSource(
         }
     }
 
+    /**
+     * Publishes the primary monitoring contact so the backend can notify them.
+     *
+     * Without this the notification webhook has no recipient. Sections 11 and 14 require the
+     * monitoring contact to be told about an SOS or a missed check-in, but nothing in the schema
+     * previously linked a person to a device. Upserted by device_id so repeated saves do not
+     * create duplicates.
+     */
+    suspend fun syncMonitoringContact(
+        deviceId: String,
+        name: String,
+        email: String?,
+        phone: String?
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!isConfigured) {
+            return@withContext Result.failure(RemoteNotConfiguredException())
+        }
+        // Section 51: only publish a contact when there is a way to reach them.
+        if (name.isBlank() || (email.isNullOrBlank() && phone.isNullOrBlank())) {
+            Log.i("SupabaseSync", "No monitoring contact configured; nothing to publish.")
+            return@withContext Result.success(Unit)
+        }
+        try {
+            val body = JSONObject().apply {
+                put("device_id", deviceId)
+                put("name", name)
+                put("email", email?.takeIf { it.isNotBlank() })
+                put("phone", phone?.takeIf { it.isNotBlank() })
+                put("is_primary", true)
+            }
+            postToSupabase("monitoring_contacts", body.toString())
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("SupabaseSync", "Could not publish monitoring contact: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     private suspend fun postToSupabase(table: String, jsonBody: String) {
         // RLS is scoped to auth.uid(), so an unauthenticated request would be rejected outright.
         val token = authClient.accessToken()

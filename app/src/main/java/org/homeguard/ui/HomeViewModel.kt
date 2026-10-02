@@ -407,6 +407,20 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 personName = config.personName,
                 personRole = config.personRole
             )
+            // Section 11/14: the monitoring contact must exist on the backend before an
+            // emergency row can be turned into a notification for them.
+            container.remoteSyncDataSource.syncMonitoringContact(
+                deviceId = deviceId,
+                name = config.primaryContact.name,
+                email = config.primaryContact.email,
+                phone = config.primaryContact.phoneOrHandle
+            ).onFailure {
+                android.util.Log.w(
+                    "HomeGuard",
+                    "Could not publish the monitoring contact; caregiver alerts will not send",
+                    it
+                )
+            }
         }
     }
 

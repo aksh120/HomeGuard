@@ -40,6 +40,7 @@ class PreferencesManager(private val context: Context) {
 
         val KEY_PRIMARY_CONTACT_NAME = stringPreferencesKey("primary_contact_name")
         val KEY_PRIMARY_CONTACT_PHONE = stringPreferencesKey("primary_contact_phone")
+        val KEY_PRIMARY_CONTACT_EMAIL = stringPreferencesKey("primary_contact_email")
 
         val KEY_SECONDARY_CONTACT_NAME = stringPreferencesKey("secondary_contact_name")
         val KEY_SECONDARY_CONTACT_PHONE = stringPreferencesKey("secondary_contact_phone")
@@ -119,7 +120,8 @@ class PreferencesManager(private val context: Context) {
             personRole = prefs[KEY_PERSON_ROLE] ?: "",
             primaryContact = ContactInfo(
                 name = prefs[KEY_PRIMARY_CONTACT_NAME] ?: "",
-                phoneOrHandle = prefs[KEY_PRIMARY_CONTACT_PHONE] ?: ""
+                phoneOrHandle = prefs[KEY_PRIMARY_CONTACT_PHONE] ?: "",
+                email = prefs[KEY_PRIMARY_CONTACT_EMAIL] ?: ""
             ),
             secondaryContact = ContactInfo(
                 name = prefs[KEY_SECONDARY_CONTACT_NAME] ?: "",
@@ -200,6 +202,7 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_PERSON_ROLE] = config.personRole
             prefs[KEY_PRIMARY_CONTACT_NAME] = config.primaryContact.name
             prefs[KEY_PRIMARY_CONTACT_PHONE] = config.primaryContact.phoneOrHandle
+            prefs[KEY_PRIMARY_CONTACT_EMAIL] = config.primaryContact.email
             prefs[KEY_SECONDARY_CONTACT_NAME] = config.secondaryContact.name
             prefs[KEY_SECONDARY_CONTACT_PHONE] = config.secondaryContact.phoneOrHandle
             prefs[KEY_EMERGENCY_CONTACT_NAME] = config.emergencyContact.name

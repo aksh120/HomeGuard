@@ -28,6 +28,13 @@ data class ProtectedPerson(
 data class ContactInfo(
     val name: String = "",
     val phoneOrHandle: String = "",
+    /**
+     * Optional email, used to deliver caregiver alerts from the backend.
+     *
+     * Section 9 lists "contact method" alongside a phone number, and the notification path needs
+     * a channel that works without the device and the caregiver sharing a carrier.
+     */
+    val email: String = "",
     val relationship: String = "",
     val isEmergencyServices: Boolean = false
 )

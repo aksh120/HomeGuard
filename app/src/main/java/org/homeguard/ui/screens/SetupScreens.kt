@@ -83,6 +83,7 @@ fun SetupAndSettingsScreen(
 
     var primaryContactName by remember { mutableStateOf(currentConfig.primaryContact.name) }
     var primaryContactPhone by remember { mutableStateOf(currentConfig.primaryContact.phoneOrHandle) }
+    var primaryContactEmail by remember { mutableStateOf(currentConfig.primaryContact.email) }
 
     var secondaryContactName by remember { mutableStateOf(currentConfig.secondaryContact.name) }
     var secondaryContactPhone by remember { mutableStateOf(currentConfig.secondaryContact.phoneOrHandle) }
@@ -197,6 +198,20 @@ fun SetupAndSettingsScreen(
                 value = primaryContactPhone,
                 onValueChange = { primaryContactPhone = it },
                 keyboardType = KeyboardType.Text
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            LabeledField(
+                label = stringResource(R.string.setup_primary_email_label),
+                value = primaryContactEmail,
+                onValueChange = { primaryContactEmail = it },
+                keyboardType = KeyboardType.Email
+            )
+            Text(
+                text = stringResource(R.string.setup_primary_email_hint),
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 21.sp,
+                modifier = Modifier.padding(top = 6.dp)
             )
             Spacer(modifier = Modifier.height(14.dp))
             LabeledField(
@@ -460,7 +475,8 @@ fun SetupAndSettingsScreen(
                         personRole = personRole,
                         primaryContact = ContactInfo(
                             name = primaryContactName,
-                            phoneOrHandle = primaryContactPhone
+                            phoneOrHandle = primaryContactPhone,
+                            email = primaryContactEmail
                         ),
                         secondaryContact = ContactInfo(
                             name = secondaryContactName,

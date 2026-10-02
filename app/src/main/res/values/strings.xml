@@ -229,6 +229,8 @@
     <string name="setup_primary_contact_hint">Optional</string>
     <string name="setup_primary_phone_label">Phone number or web link</string>
     <string name="setup_primary_phone_hint">Works without a SIM card</string>
+    <string name="setup_primary_email_label">Email address</string>
+    <string name="setup_primary_email_hint">Used to send an alert if you press the emergency button. Leave blank if you do not want email alerts.</string>
     <string name="setup_secondary_contact_label">Secondary contact name</string>
     <string name="setup_secondary_contact_hint">Optional</string>
     <string name="setup_secondary_phone_label">Secondary phone or web link</string>
