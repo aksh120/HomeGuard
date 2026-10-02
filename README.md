@@ -1,6 +1,6 @@
 <div align="center">
 
-  <img src="art/logo.svg" alt="HomeGuard Kinetic Aegis Logo" width="160" height="160" />
+  <img src="art/logo.svg" alt="HomeGuard logo" width="160" height="160" />
 
   # HomeGuard
   ### Open-Source Home Safety, Made Simple.
@@ -9,310 +9,264 @@
   [![Platform](https://img.shields.io/badge/Platform-Android%208.0%2B%20(API%2026%2B)-3DDC84.svg?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
   [![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
   [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4.svg?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
-  [![Build](https://img.shields.io/badge/Build-Passing-success.svg?style=for-the-badge)](https://github.com/aksh120/homeguard)
-  [![Tests](https://img.shields.io/badge/Tests-100%25%20Passing-brightgreen.svg?style=for-the-badge)](https://github.com/aksh120/homeguard)
 
   <p align="center">
-    <strong>A production-grade, privacy-respecting Android safety layer built for people staying at home.</strong><br>
-    Engineered for elderly family members, people living alone, parents, roommates, and recovering patients.<br>
-    Repurposes any budget or spare Android device into an ultra-reliable, SIM-less home sentinel.
+    <strong>A privacy-respecting Android safety layer for people staying at home.</strong><br>
+    Built for elderly family members, people living alone, parents, roommates, and anyone who
+    wants a dependable extra layer of safety.<br>
+    Runs on any spare Android 8+ phone, with or without a SIM card.
   </p>
 
   <p align="center">
-    <a href="#-why-homeguard">Why HomeGuard</a> •
-    <a href="#-core-pillars">Core Pillars</a> •
-    <a href="#-system-architecture">Architecture</a> •
-    <a href="#-screens--interface-modes">Interface Tour</a> •
-    <a href="#-cloud-backend-supabase">Cloud Backend</a> •
-    <a href="#-build--installation">Build &amp; Install</a> •
-    <a href="#-safety-disclaimer">Disclaimer</a>
+    <a href="#-what-it-does">What it does</a> •
+    <a href="#-what-it-does-not-do">What it does not do</a> •
+    <a href="#-architecture">Architecture</a> •
+    <a href="#-backend-setup">Backend setup</a> •
+    <a href="#-building">Building</a> •
+    <a href="#-limitations">Limitations</a>
   </p>
 
 </div>
 
 ---
 
-## 🌟 Why HomeGuard?
+## What HomeGuard is for
 
-Commercial safety devices and mobile trackers are broken in two fundamental ways:
-1. **Predatory Subscriptions**: Proprietary medical alert pendants charge \$30–\$60/month for basic cellular hardware with lock-in contracts.
-2. **Invasive Surveillance**: Consumer family-tracking apps constantly harvest outdoor GPS coordinates, geofences, and background movements—draining battery in hours while selling private location history.
+When someone is at home, GPS tracking is useless, invasive, and a drain on the battery. What
+matters instead is: **can I ask for help quickly, can my contacts know I am okay, and does the
+device still work?**
 
-**HomeGuard is built on a different philosophy**:
-When an individual is at home, **GPS tracking is useless, invasive, and wasteful**. What actually matters is instant emergency signaling, guaranteed zero alert loss, routine safety confirmations, battery resilience, and connectivity monitoring.
+HomeGuard turns a spare Android phone into a home safety device: a large emergency trigger with a
+hold-to-confirm guard, scheduled safety checks, offline alert queuing, battery and connectivity
+monitoring, an offline emergency reference card, a fire guide, night mode, and a power-cut mode.
 
-HomeGuard runs effortlessly on older, low-cost Android hardware (even without a cellular SIM card), connecting over domestic Wi-Fi with guaranteed offline durability.
-
-### Comparison Matrix
-
-| Feature / Attribute | HomeGuard (Open Source) | Commercial Alert Pendants | Typical Family Tracker Apps |
+| | HomeGuard | Commercial alert pendant | Family tracker app |
 |---|:---:|:---:|:---:|
-| **Cost** | **100% Free & Open Source** | \$30–\$60 / month | Freemium / Ad-supported |
-| **Hardware Required** | **Any Android phone (Android 8+)** | Proprietary hardware | Modern flagship smartphone |
-| **Cellular SIM Required?** | **No (Wi-Fi Native + Offline)** | Mandatory cellular | Mandatory mobile data |
-| **GPS / Location Tracking** | **None (Zero Tracking)** | Cell tower / GPS | Continuous background GPS |
-| **Battery Impact** | **Ultra-Low (<1% / day)** | Dedicated battery | High battery drain (GPS wake-locks) |
-| **SOS Queue Persistence** | **Guaranteed (Durable Room Queue)** | Proprietary protocol | Volatile (drops if disconnected) |
-| **Safety State Logic** | **Tri-State (`SAFE`, `UNKNOWN`, `EMERGENCY`)** | Binary Panic Button | Inferred from geofencing |
-| **Cloud Independence** | **Works 100% Offline + Pluggable Supabase** | Proprietary cloud only | Proprietary cloud only |
-| **Privacy & Telemetry** | **Strict Zero-Knowledge Data Model** | Voice recordings stored | Location data monetized |
+| Cost | Free, open source | \$30–\$60 / month | Freemium / ads |
+| Hardware | Any Android 8+ phone | Proprietary | Modern flagship |
+| SIM required | No | Yes | Yes |
+| Location tracking | **None** | Cell tower / GPS | Continuous GPS |
+| Offline durability | Alert queue on device | Proprietary | Usually lost |
+| Safety states | `SAFE` / `UNKNOWN` / `EMERGENCY` | Binary panic button | Inferred from geofences |
 
 ---
 
-## 🛡️ Core Pillars
+## What HomeGuard does
 
-### 1. Guaranteed Zero SOS Loss (Offline-First Queue)
-In an emergency, network connectivity is never guaranteed. HomeGuard commits every emergency trigger atomically — a Room `@Transaction` spanning both tables — to a local **Room database queue (`pending_events`)** before any network I/O is attempted. The database is stored in the app's private sandbox and is excluded from cloud backup.
-- **Online**: Dispatched instantly via Supabase PostgREST with unique idempotency tokens (`UUIDv4`), sent with `Prefer: resolution=merge-duplicates`.
-- **Offline**: Safely preserved across device reboots and process terminations.
-- **Restoration**: Automatically detected by `ConnectivityManager.NetworkCallback` and drained via `WorkManager`.
-- **Retries**: A failed send is retried on every subsequent pass, up to 10 attempts. A failed event is *never* deleted — only a confirmed delivery removes it. A build with no Supabase credentials keeps events queued rather than discarding them.
-- Duplicate alerts are mathematically impossible.
+**Emergency (SOS)**
+- Large press-and-hold trigger with a 2.5-second guard, so a pocket bump cannot fire it
+- A 5-second countdown with cancel before anything is sent
+- Persisted to a local queue **before** any network call, so an alert cannot be lost
+- Survives app restart, device reboot, Wi-Fi loss, and server failure
+- Retried on every sync pass, up to 10 attempts. A failed alert is never deleted
+- Loud local alarm plus Morse-code vibration
 
-> **Not encrypted at rest.** The local database is sandboxed and backup-excluded, but it is not SQLCipher-encrypted. Protecting data on a rooted or unlocked device is out of scope.
+**Safety checks**
+- A configurable schedule (up to twice a day) raises "Are you okay?"
+- Answering records a check-in; not answering within the timeout downgrades the state to `UNKNOWN`
+- A missed check-in is explicitly **not** treated as an emergency
+- Significant device movement counts as a passive check-in
 
-### 2. Tri-State Safety Intelligence
-Never assume safety simply because a phone is plugged in or connected to Wi-Fi. HomeGuard enforces an honest, non-alarmist safety state machine:
-- 🟢 **`SAFE`**: Active, recent safety confirmation exists (via routine check-in).
-- 🟡 **`UNKNOWN`**: Check-in window elapsed or heartbeat stale. Alerts trusted contacts to check in, without causing panic.
-- 🔴 **`EMERGENCY`**: An explicit SOS has been confirmed through the 5-second countdown.
+**Device health**
+- Battery level, charging state, and configurable warning and critical thresholds
+- Wi-Fi and internet state via `ConnectivityManager` callbacks, not polling
+- A heartbeat so a caregiver can tell an offline device from a healthy one
+- Low-battery alerts at the configured thresholds, fired once per discharge
 
-```
-       [ App Boot / Launch ]
-                 │
-                 ▼
-          ┌─────────────┐
-          │   UNKNOWN   │ ◄─────────────────────────┐
-          └──────┬──────┘                           │
-                 │                                  │ Check-In Window
-                 │ User confirms "I'M OK"           │ Elapses (Grace Expired)
-                 ▼                                  │
-          ┌─────────────┐                           │
-          │    SAFE     ├───────────────────────────┘
-          └──────┬──────┘
-                 │
-                 │ Explicit Confirmed SOS
-                 ▼
-          ┌─────────────┐
-          │  EMERGENCY  │ ──( Stop Alarm / Resolve )──> [ UNKNOWN / SAFE ]
-          └─────────────┘
-```
+**Offline reference**
+- Emergency contacts, local emergency number, home address and access instructions
+- Optional medical details: allergies, blood group, medications, doctor
+- A fire evacuation guide with an explicit "this is not professional advice" caveat
 
-### 3. Hardware & Battery Economy
-Engineered to run 24/7 on repurposed budget phones without overheating or degrading the battery:
-- **Zero continuous polling loops**: Uses sticky broadcasts (`ACTION_BATTERY_CHANGED`) and event-driven network callbacks.
-- **Threshold Alerts**: Intelligent rate-limited notifications at 20% (Warning) and 10% (Critical).
-- **Fast Torch Engine**: Activates the camera flash instantly via `CameraManager.setTorchMode()` with zero camera preview or viewfinder overhead.
-- **Acoustic & Haptic Alarm**: AudioTrack alarm stream accompanied by tactile international Morse code SOS vibration pulses (`... --- ...`).
-
-### 4. Modular Communication Abstraction
-Because the protected phone may not have an active cellular SIM card, HomeGuard abstracts communication behind a modular provider pipeline (`CommunicationManager`):
-- **System Dialer (`ACTION_DIAL`)**: Opens phone dialer directly without requiring dangerous runtime permissions.
-- **Internet Communication**: Universal VoIP/Web links or custom messaging URIs for SIM-less Wi-Fi calling.
-- **Honest Feedback**: Never fakes a call state—if calling is unavailable, the user is immediately informed and the SOS event is prioritized.
-
-### 5. Complete Neutrality & Localization
-HomeGuard is built for international adoption:
-- All user-facing strings live in [`res/values/strings.xml`](app/src/main/res/values/strings.xml). This is a project rule ([`CONTRIBUTING.md`](CONTRIBUTING.md) principle 4); do not hardcode display text in Kotlin.
-- Zero hardcoded family names (no *Mom*, *Dad*, *Son*, or personal identifiers).
-- Fully configurable local emergency numbers (supports 911, 112, 999, 100, etc.).
+**Other**
+- Night mode with a configurable window and a dimmed, animation-free screen
+- Power-cut mode with flashlight and battery guidance
+- Flashlight via `CameraManager`, no camera preview
 
 ---
 
-## 🏛️ System Architecture
+## What HomeGuard does **not** do
 
-HomeGuard adheres strictly to Clean Architecture and Android Jetpack guidelines:
+Stated plainly, because a safety app that overstates itself is worse than one that does less.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   Jetpack Compose UI (Material 3)                      │
-│   ProtectedHomeScreen • EmergencyScreens • UtilityScreens • Dashboard   │
-└───────────────────────────────────▲────────────────────────────────────┘
-                                    │ StateFlow / UI Events
-┌───────────────────────────────────┴────────────────────────────────────┐
-│                             HomeViewModel                              │
-│         Manages UI State, Countdown Timers, Navigation Routing         │
-└───────────────────────────────────▲────────────────────────────────────┘
-                                    │ Domain Use Cases
-┌───────────────────────────────────┴────────────────────────────────────┐
-│                           Repository Layer                             │
-│     SafetyRepository • EventRepository • SyncRepository • Config       │
-└───────────────────┬────────────────────────────────┬───────────────────┘
-                    │                                │
-        ┌───────────▼───────────┐        ┌───────────▼───────────┐
-        │   Local Data Store    │        │   Remote Data Sync    │
-        │ - Room DB (Queue)     │        │ - Supabase PostgREST  │
-        │ - Jetpack DataStore   │        │ - Offline Mock Client │
-        │ - Hardware Managers   │        │ - WorkManager Worker  │
-        └───────────────────────┘        └───────────────────────┘
-```
-
-### Module Blueprint
-
-| Component | Class | Purpose |
-|---|---|---|
-| **Database** | [`HomeGuardDatabase`](app/src/main/java/org/homeguard/core/database/HomeGuardDatabase.kt) | Room database containing `pending_events` and `event_history` tables. |
-| **Preferences** | [`PreferencesManager`](app/src/main/java/org/homeguard/core/datastore/PreferencesManager.kt) | Jetpack DataStore handling device modes, contact info, and schedules. |
-| **Safety Engine** | [`SafetyRepository`](app/src/main/java/org/homeguard/core/data/SafetyRepository.kt) | Evaluates safety state flow based on check-in timestamps and SOS triggers. |
-| **Sync Manager** | [`SyncRepository`](app/src/main/java/org/homeguard/core/data/SyncRepository.kt) | Coordinates idempotent event dispatch with deduplication tokens. |
-| **Background Sync** | [`SyncWorker`](app/src/main/java/org/homeguard/core/sync/SyncWorker.kt) | WorkManager coroutine worker with `NetworkType.CONNECTED` constraint. |
-| **Flashlight** | [`TorchManager`](app/src/main/java/org/homeguard/core/hardware/TorchManager.kt) | High-speed torch toggle using Android `CameraManager`. |
-| **Alarm & Haptics** | [`EmergencyAlarmManager`](app/src/main/java/org/homeguard/core/hardware/EmergencyAlarmManager.kt) | Looping alarm sound generator and tactile SOS vibration pattern. |
-| **Battery Monitor** | [`BatteryMonitor`](app/src/main/java/org/homeguard/core/hardware/BatteryMonitor.kt) | Event-driven sticky receiver for battery levels and charging states. |
-| **Network Monitor** | [`ConnectivityMonitor`](app/src/main/java/org/homeguard/core/hardware/ConnectivityMonitor.kt) | `ConnectivityManager.NetworkCallback` observer with auto-reconnect hooks. |
+- **No location tracking of any kind.** No GPS permission exists in the manifest.
+- **No caregiver app or remote dashboard.** The "Recent activity" screen shows what *this* phone
+  has recorded. Watching a device from a second phone is not implemented. `MONITORING` device
+  mode is stored but currently changes no behaviour.
+- **No SMS or phone delivery.** Caregiver alerts are delivered by **email** only, via a Supabase
+  webhook and edge function. A contact with a phone number but no email will not be reached.
+- **No push notifications.** Email is not real-time in the way FCM would be, and it will not
+  arrive if the caregiver's phone is offline.
+- **The emergency alarm is not backed by a foreground service.** It stops if the process is
+  killed or the app is swiped away, and it stops when the screen turns off on some devices.
+- **Local data is not encrypted at rest.** It is sandboxed and excluded from backup, which is not
+  the same thing.
+- **No photo upload.** `ProtectedPerson.photoUri` is modelled but unused.
+- **Performance has not been profiled on low-end hardware.** Section 40 of the specification asks
+  for this; it has not been done.
 
 ---
 
-## 📱 Screens & Interface Tour
+## Architecture
 
-The user interface is designed for **2-second visual comprehension** with large, high-contrast touch targets (>64dp) and zero visual noise.
-
-### 1. Protected Device Screen (`PROTECTED_DEVICE`)
-Stationed at home. Displays immediate safety status, real-time connectivity and battery telemetry, and large primary action triggers.
-
-```text
-┌──────────────────────────────────────────────┐
-│  [▲] HOMEGUARD                               │
-│      Open-source home safety, made simple.   │
-├──────────────────────────────────────────────┤
-│  ┌────────────────────────────────────────┐  │
-│  │  🟢 SAFE                               │  │
-│  │  Safety confirmed by recent check-in   │  │
-│  └────────────────────────────────────────┘  │
-│                                              │
-│  Wi-Fi connected   •   Battery 84% (Charging)│
-│  Last check-in: 10:30 AM, Today              │
-├──────────────────────────────────────────────┤
-│                                              │
-│  ┌────────────────────────────────────────┐  │
-│  │            [✓]  I'M OK                 │  │
-│  └────────────────────────────────────────┘  │
-│                                              │
-│  ┌────────────────────────────────────────┐  │
-│  │           [⚠]  EMERGENCY               │  │
-│  └────────────────────────────────────────┘  │
-│                                              │
-│  ┌────────────────────────────────────────┐  │
-│  │       [📞]  CALL PRIMARY CONTACT       │  │
-│  └────────────────────────────────────────┘  │
-│                                              │
-│  ┌────────────────────────────────────────┐  │
-│  │           [⚡]  FLASHLIGHT             │  │
-│  └────────────────────────────────────────┘  │
-│                                              │
-│  [ Night Mode ]   [ Power Cut ]   [ Info ]   │
-└──────────────────────────────────────────────┘
+```
+UI (Compose)
+  ↓ StateFlow
+HomeViewModel
+  ↓
+AppContainer (composition root — no DI framework)
+  ↓
+Repositories:  SafetyRepository · EventRepository · SyncRepository
+  ↓                      ↓                      ↓
+Room queue            DataStore            Supabase REST
++ audit log           preferences          (+ anonymous auth session)
 ```
 
-### 2. Emergency Countdown & Active Alert
-When **EMERGENCY** is pressed:
-- A **5-second cancelable countdown** prevents accidental triggers with a prominent `CANCEL` button.
-- Upon completion, the alarm sounds, the SOS event is persisted to Room, and the screen transitions to high-contrast alert mode with `STOP ALARM`.
-- If offline, an explicit notification reassures the user: *"Your emergency alert has been saved locally and will be sent automatically when the connection returns."*
+No Hilt, Dagger, or Koin. `CONTRIBUTING.md` principle 1 rules out dependency bloat, and the graph
+is small enough to read in one screen, so it is wired by hand in
+[`AppContainer`](app/src/main/java/org/homeguard/core/di/AppContainer.kt).
 
-### 3. Dedicated Offline Utilities
-- **Power Cut Mode**: Extra-large flashlight switch, high-visibility battery percentage, quick-dial primary contact, and offline outage guidelines.
-- **Night Mode**: Pure black OLED interface that reduces sensory distractions while keeping emergency triggers immediately accessible.
-- **Offline Emergency Directory & Fire Guide**: Contact cards, home entrance notes, physician info, optional medical notes (allergies/blood group), and calm fire evacuation procedures.
+**Safety state machine** — a pure function, unit tested:
 
-### 4. Remote Monitoring Dashboard (`MONITORING_DEVICE`)
-Viewable on a caregiver or trusted contact's phone:
-- Real-time safety status (`SAFE`, `UNKNOWN`, `EMERGENCY`).
-- Protected device connectivity (`ONLINE` / `OFFLINE`), battery level, and last seen timestamp.
-- Audit timeline of recent check-ins and emergency alerts.
+| State | Meaning |
+|---|---|
+| `SAFE` | A check-in was confirmed inside the configured window |
+| `UNKNOWN` | No check-in yet, or the window elapsed |
+| `EMERGENCY` | An explicit SOS was confirmed through the countdown |
 
----
+A missed check-in moves `SAFE → UNKNOWN` and never further. Only the SOS button produces
+`EMERGENCY`.
 
-## ☁️ Cloud Backend (Supabase)
+**Permissions.** `INTERNET`, `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`,
+`VIBRATE`, and an optional `CAMERA` for the flashlight. No location, no contacts, no microphone, no
+storage.
 
-HomeGuard works completely offline out-of-the-box. When connected to a backend, it integrates seamlessly with **PostgreSQL / Supabase** using lightweight PostgREST endpoints.
+**Local data.** DataStore for preferences and settings; Room only for the event queue and audit
+trail. Backup is disabled with explicit extraction rules, because this app stores medical details
+and home addresses.
 
-### Database Schema Overview ([`backend/schema.sql`](backend/schema.sql))
-- **`devices`**: Registered protected and monitoring devices.
-- **`device_status`**: Telemetry heartbeat, battery %, charging state, and online presence.
-- **`emergency_events`**: Immutable emergency event audit logs with unique UUIDs.
-- **`check_ins`**: Time-stamped "I'M OK" safety confirmations.
-- **Row Level Security (RLS)**: Every table is owned by an `auth.users` row and every policy is scoped with `auth.uid() = user_id`. The client bootstraps a Supabase **anonymous session** on first launch, so each install has its own identity and can only ever read or write its own records. An unauthenticated request holding only the public anon key matches no rows.
-
-### Quick Setup
-1. Create a free project at [supabase.com](https://supabase.com).
-2. In your Supabase Dashboard, open **SQL Editor**.
-3. Paste the contents of [`backend/schema.sql`](backend/schema.sql) and click **Run**.
-4. In your project, add your Supabase credentials to `local.properties`:
-   ```properties
-   supabase.url=https://YOUR_PROJECT_REF.supabase.co
-   supabase.anon.key=YOUR_ANON_PUBLIC_KEY
-   ```
+Full detail in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
 
-## 🛠️ Build & Installation
+## Backend setup
 
-### Prerequisites
-- Android Studio Ladybug (2024.2+) or command-line Android SDK tools.
-- JDK 21 (bundled with modern Android Studio).
-- Android SDK 35 with Build Tools 35.0.0+.
+HomeGuard works fully offline. The backend is optional and only adds caregiver email alerts and
+remote visibility of queued events.
 
-### Command Line Build
+### 1. Create a Supabase project
+
+### 2. Apply the schema
+
+In the Supabase SQL editor, run in order:
+
+| File | Purpose |
+|---|---|
+| [`backend/schema.sql`](backend/schema.sql) | Tables, indexes, RLS policies |
+| [`backend/migrations/001_rls_ownership.sql`](backend/migrations/001_rls_ownership.sql) | Scopes RLS to `auth.uid()`. For an empty database. |
+| [`backend/migrations/001b_backfill_existing_rows.sql`](backend/migrations/001b_backfill_existing_rows.sql) | Only if you already have rows |
+| [`backend/migrations/002_monitoring_contacts.sql`](backend/migrations/002_monitoring_contacts.sql) | Caregiver contacts and status history |
+
+### 3. Enable Anonymous sign-ins
+
+**Authentication → Providers → Anonymous Sign-Ins → ON**
+
+This is required. The RLS policies are scoped to `auth.uid()`, and the app bootstraps a per-install
+anonymous session. Without it every write is rejected.
+
+### 4. Deploy the caregiver notification function
 
 ```bash
-# Clone the repository
-git clone https://github.com/aksh120/homeguard.git
-cd homeguard
-
-# Run automated unit tests
-./gradlew test
-
-# Build Debug APK
-./gradlew assembleDebug
-
-# Build Production Release APK
-./gradlew assembleRelease
-
-# Install directly to an ADB-connected Android device
-./gradlew installDebug
+supabase functions deploy notify-caregiver --no-verify-jwt
+supabase secrets set RESEND_API_KEY=re_...
 ```
 
-Compiled APK outputs are generated at:
-- `app/build/outputs/apk/debug/app-debug.apk`
-- `app/build/outputs/apk/release/app-release-unsigned.apk`
+### 5. Create the webhook
+
+**Database → Webhooks → Create**:
+
+- Table `emergency_events`, event `INSERT`
+- Type: *Supabase Database Webhook*
+- URL: `https://<project-ref>.supabase.co/functions/v1/notify-caregiver`
+- Add header `Authorization: service_role`
+
+The function is
+[`backend/functions/notify-caregiver/index.ts`](backend/functions/notify-caregiver/index.ts). It
+reads `RESEND_API_KEY` from a function secret, so no credential is ever shipped in the app.
+
+There is deliberately **no** webhook on `check_ins`: a caregiver does not need an email every
+morning saying the device is fine.
+
+### 6. Point the app at it
+
+Add to `local.properties` (debug builds only; release uses CI secrets):
+
+```properties
+supabase.url=https://YOUR_PROJECT_REF.supabase.co
+supabase.anon.key=YOUR_ANON_KEY
+```
 
 ---
 
-## 🔒 Security & Privacy
+## Building
 
-HomeGuard is safety-critical software designed around zero-knowledge principles:
-- **No Background GPS Tracking**: We deliberately do not request location permissions (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`).
-- **No Credential Exposure**: Sensitive keys and local configurations are read from `local.properties` (strictly ignored by Git) and compiled into `BuildConfig`.
-- **Sandbox Storage**: All local data is isolated in Android application-sandboxed Room databases and DataStore preferences.
-- **Strict Permission Footprint**: Requests `CAMERA` (optional, for the torch flash), `RECORD_AUDIO` (optional, for optional smoke-alarm detection), and `POST_NOTIFICATIONS`. No SMS, contacts, or location permissions are ever requested.
-  - The **microphone is off by default and opt-in.** The permission is requested only when the user explicitly enables acoustic smoke detection in Settings — never at launch, and never on resume. No audio is recorded or stored; only an amplitude/zero-crossing heuristic is evaluated in memory.
-  - The torch requests `CAMERA` only when the flashlight is first toggled.
+Requires JDK 21 and the Android SDK.
 
----
+```bash
+# Debug APK
+./gradlew :app:assembleDebug
 
-## ⚠️ Safety Disclaimer
+# Tests
+./gradlew :app:testDebugUnitTest
 
-> **IMPORTANT NOTICE**: HomeGuard is an auxiliary home safety companion designed to provide an additional layer of communication and safety awareness. **It is NOT a certified emergency dispatch system, medical alarm device, or replacement for emergency services (such as 911, 112, 999).**
-> 
-> Operating system battery savers, Wi-Fi router power outages, device battery depletion, or network drops may cause notifications or check-in synchronization to be delayed. Users should always maintain active real-world emergency contacts and professional medical emergency resources.
+# Release (R8 minified, unsigned)
+./gradlew :app:assembleRelease
+```
 
----
+Output: `app/build/outputs/apk/`. Release is minified and shrinks from ~18 MB to ~1.5 MB.
 
-## 🤝 Open Source & Contributing
-
-We welcome contributions, translations, and security audits!
-- **Contributing**: Please review [CONTRIBUTING.md](CONTRIBUTING.md) for code style and pull request guidelines.
-- **Code of Conduct**: See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
-- **Security Inquiries**: See [SECURITY.md](SECURITY.md).
-- **Changelog**: All releases are documented in [CHANGELOG.md](CHANGELOG.md).
+Release credentials come only from `SUPABASE_URL` / `SUPABASE_ANON_KEY` environment variables or
+`-P` properties. `local.properties` feeds debug alone, so a developer's key cannot reach a shipped
+APK.
 
 ---
 
-## 📄 License
+## Testing
 
-HomeGuard is open-source software licensed under the **Apache License 2.0**. See the [LICENSE](LICENSE) file for details.
+60 unit tests covering the safety state machine, the offline queue and its retry semantics, JSON
+payload serialisation, battery thresholds, the check-in schedule and timeout rules, and the night
+mode window.
 
-<div align="center">
-  <sub>HomeGuard • Open-source home safety, made simple.</sub>
-</div>
+```bash
+./gradlew :app:testDebugUnitTest
+```
+
+**Not covered:** instrumented and UI tests. The hold-to-emergency gesture and the flashlight
+permission path are verified by inspection only.
+
+---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Four principles are enforced by review:
+
+1. Safety first — no bloat or non-essential background work
+2. Strict neutrality — no personal names, no country-specific emergency numbers
+3. Privacy first — no location or behavioural tracking
+4. 100% localized — never hardcode user-facing strings in Kotlin
+
+## License
+
+[Apache 2.0](LICENSE). Contributions welcome.
+
+---
+
+## Safety disclaimer
+
+HomeGuard is an **additional** safety layer. It is **not** a guaranteed emergency response service.
+
+Internet may be unavailable. The phone may lose power. Android may restrict background activity, so
+alerts can be delayed. Email alerts will not arrive if the caregiver's phone is offline.
+
+**Keep real emergency contacts you can reach by other means.** Do not rely on HomeGuard as your
+only safety net.
