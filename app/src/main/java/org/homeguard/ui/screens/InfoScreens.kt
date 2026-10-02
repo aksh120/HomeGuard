@@ -1,9 +1,6 @@
 package org.homeguard.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,27 +9,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -40,14 +31,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.homeguard.R
 import org.homeguard.core.designsystem.theme.ActionEmergency
-import org.homeguard.core.designsystem.theme.StatusEmergency
-import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.model.AppConfig
-import org.homeguard.ui.components.CyberBadge
 import org.homeguard.ui.components.CyberButton
 import org.homeguard.ui.components.CyberGlassCard
 import org.homeguard.ui.components.CyberTopAppBar
 
+/**
+ * Offline emergency reference (section 21).
+ *
+ * Everything here is available with no internet and no network. Empty fields are shown as
+ * "Not set" rather than blank rows, so the resident can tell the difference between "nothing
+ * recorded" and "nothing to record".
+ */
 @Composable
 fun EmergencyInfoScreen(
     appConfig: AppConfig,
@@ -59,132 +54,105 @@ fun EmergencyInfoScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF060911),
-                        Color(0xFF090D16),
-                        Color(0xFF0D1322)
-                    )
-                )
-            )
-            .statusBarsPadding()
             .verticalScroll(scrollState)
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = stringResource(R.string.info_dossier_title),
-            subtitle = stringResource(R.string.info_offline_vault),
+            title = stringResource(R.string.info_title),
+            subtitle = stringResource(R.string.tile_offline_vault),
             onBackClick = onBackClick
         )
 
-        // Quick Fire Evacuation Launcher
-        CyberButton(
-            text = stringResource(R.string.info_fire_protocol),
-            onClick = onOpenFireGuide,
-            accentColor = StatusEmergency,
-            icon = Icons.Default.LocalFireDepartment,
-            minHeight = 58
+        SectionHeader(Icons.Default.Phone, stringResource(R.string.info_contacts_header))
+
+        CyberGlassCard {
+            ContactRow(
+                stringResource(R.string.info_primary_contact),
+                appConfig.primaryContact.name,
+                appConfig.primaryContact.phoneOrHandle
+            )
+            ContactRow(
+                stringResource(R.string.info_secondary_contact),
+                appConfig.secondaryContact.name,
+                appConfig.secondaryContact.phoneOrHandle
+            )
+            ContactRow(
+                stringResource(R.string.info_emergency_contact),
+                appConfig.emergencyContact.name,
+                appConfig.emergencyContact.phoneOrHandle
+            )
+            ContactRow(
+                stringResource(R.string.info_local_emergency_services),
+                "",
+                appConfig.localEmergencyNumber
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        SectionHeader(Icons.Default.Home, stringResource(R.string.info_home_header))
+
+        CyberGlassCard {
+            DetailRow(stringResource(R.string.info_home_address), appConfig.homeInfo.address)
+            DetailRow(
+                stringResource(R.string.info_building_security),
+                appConfig.homeInfo.buildingSecurityContact
+            )
+            DetailRow(
+                stringResource(R.string.info_home_instructions),
+                appConfig.homeInfo.accessInstructions
+            )
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        SectionHeader(
+            Icons.Default.MedicalServices,
+            stringResource(R.string.info_medical_header)
         )
 
-        Spacer(modifier = Modifier.height(20.dp))
+        val medical = appConfig.medicalInfo
+        val hasMedical = listOf(
+            medical.allergies, medical.bloodGroup, medical.medications,
+            medical.doctorContact, medical.notes
+        ).any { it.isNotBlank() }
 
-        // SECTION 1: EMERGENCY CONTACTS
-        DossierSectionTitle(icon = Icons.Default.Phone, title = stringResource(R.string.info_contacts_header))
         CyberGlassCard {
-            DossierRow(
-                label = stringResource(R.string.info_primary_contact),
-                value = formatContact(appConfig.primaryContact.name, appConfig.primaryContact.phoneOrHandle),
-                accent = Color(0xFF38BDF8)
-            )
-            if (appConfig.secondaryContact.name.isNotBlank() || appConfig.secondaryContact.phoneOrHandle.isNotBlank()) {
-                DossierDivider()
-                DossierRow(
-                    label = stringResource(R.string.info_secondary_contact),
-                    value = formatContact(appConfig.secondaryContact.name, appConfig.secondaryContact.phoneOrHandle)
-                )
-            }
-            if (appConfig.emergencyContact.name.isNotBlank() || appConfig.emergencyContact.phoneOrHandle.isNotBlank()) {
-                DossierDivider()
-                DossierRow(
-                    label = stringResource(R.string.info_emergency_contact),
-                    value = formatContact(appConfig.emergencyContact.name, appConfig.emergencyContact.phoneOrHandle),
-                    accent = StatusEmergency
-                )
-            }
-            if (appConfig.localEmergencyNumber.isNotBlank()) {
-                DossierDivider()
-                DossierRow(
-                    label = stringResource(R.string.info_local_emergency_services),
-                    value = appConfig.localEmergencyNumber,
-                    accent = StatusEmergency
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // SECTION 2: HOME DISPATCH DETAILS
-        DossierSectionTitle(icon = Icons.Default.Home, title = stringResource(R.string.info_home_dispatch))
-        CyberGlassCard {
-            DossierRow(
-                label = stringResource(R.string.info_home_address),
-                value = appConfig.homeInfo.address.ifBlank { "Address not configured" }
-            )
-            if (appConfig.homeInfo.buildingSecurityContact.isNotBlank()) {
-                DossierDivider()
-                DossierRow(
-                    label = stringResource(R.string.info_building_security),
-                    value = appConfig.homeInfo.buildingSecurityContact
-                )
-            }
-            if (appConfig.homeInfo.accessInstructions.isNotBlank()) {
-                DossierDivider()
-                DossierRow(
-                    label = stringResource(R.string.info_home_instructions),
-                    value = appConfig.homeInfo.accessInstructions
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // SECTION 3: MEDICAL DOSSIER
-        DossierSectionTitle(icon = Icons.Default.MedicalServices, title = stringResource(R.string.info_medical_profile))
-        CyberGlassCard {
-            val hasMedical = appConfig.medicalInfo.bloodGroup.isNotBlank() ||
-                    appConfig.medicalInfo.allergies.isNotBlank() ||
-                    appConfig.medicalInfo.medications.isNotBlank()
-
-            if (hasMedical) {
-                if (appConfig.medicalInfo.bloodGroup.isNotBlank()) {
-                    DossierRow(label = stringResource(R.string.info_blood_group), value = appConfig.medicalInfo.bloodGroup, accent = Color(0xFFF43F5E))
-                }
-                if (appConfig.medicalInfo.allergies.isNotBlank()) {
-                    DossierDivider()
-                    DossierRow(label = stringResource(R.string.info_allergies), value = appConfig.medicalInfo.allergies)
-                }
-                if (appConfig.medicalInfo.medications.isNotBlank()) {
-                    DossierDivider()
-                    DossierRow(label = stringResource(R.string.info_medications), value = appConfig.medicalInfo.medications)
-                }
-                if (appConfig.medicalInfo.doctorContact.isNotBlank()) {
-                    DossierDivider()
-                    DossierRow(label = stringResource(R.string.info_doctor), value = appConfig.medicalInfo.doctorContact)
-                }
-            } else {
+            if (!hasMedical) {
                 Text(
                     text = stringResource(R.string.info_no_medical),
-                    color = Color(0xFF64748B),
-                    fontSize = 13.sp
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 23.sp
                 )
+            } else {
+                DetailRow(stringResource(R.string.info_allergies), medical.allergies)
+                DetailRow(stringResource(R.string.info_blood_group), medical.bloodGroup)
+                DetailRow(stringResource(R.string.info_medications), medical.medications)
+                DetailRow(stringResource(R.string.info_doctor), medical.doctorContact)
+                DetailRow(stringResource(R.string.info_medical_notes), medical.notes)
             }
         }
 
-        Spacer(modifier = Modifier.height(30.dp))
+        Spacer(modifier = Modifier.height(24.dp))
+
+        CyberButton(
+            text = stringResource(R.string.guide_fire_title),
+            onClick = onOpenFireGuide,
+            accentColor = ActionEmergency,
+            icon = Icons.Default.Call
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
+/**
+ * Offline fire guide (section 22).
+ *
+ * Deliberately general. Section 22 forbids presenting unsafe instructions as professional advice,
+ * so the screen carries an explicit caveat and defers to local emergency services.
+ */
 @Composable
 fun FireGuideScreen(
     localEmergencyNumber: String,
@@ -195,194 +163,151 @@ fun FireGuideScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF1E0707),
-                        Color(0xFF0F0404),
-                        Color(0xFF060911)
-                    )
-                )
-            )
-            .statusBarsPadding()
             .verticalScroll(scrollState)
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = stringResource(R.string.info_fire_evacuation),
-            subtitle = stringResource(R.string.info_critical_playbook),
+            title = stringResource(R.string.guide_fire_title),
             onBackClick = onBackClick
         )
 
-        // Emergency Hot-Dial Banner
         if (localEmergencyNumber.isNotBlank()) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = Color(0xFF2B0A0A),
-                border = androidx.compose.foundation.BorderStroke(1.5.dp, StatusEmergency)
-            ) {
-                Row(
-                    modifier = Modifier.padding(18.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = stringResource(R.string.info_local_dispatch),
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 1.sp,
-                            color = StatusEmergency
-                        )
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = localEmergencyNumber,
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White
-                        )
-                    }
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(StatusEmergency),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.height(8.dp))
+            CyberGlassCard {
+                Text(
+                    text = stringResource(R.string.info_local_emergency_services),
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = localEmergencyNumber,
+                    fontSize = 34.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
         }
 
-        val steps = listOf(
-            stringResource(R.string.guide_fire_step1),
-            stringResource(R.string.guide_fire_step2),
-            stringResource(R.string.guide_fire_step3),
-            stringResource(R.string.guide_fire_step4),
-            stringResource(R.string.guide_fire_step5),
-            stringResource(R.string.guide_fire_step6)
-        )
+        Spacer(modifier = Modifier.height(20.dp))
+
+        CyberGlassCard {
+            StepRow(1, stringResource(R.string.guide_fire_step1))
+            StepRow(2, stringResource(R.string.guide_fire_step2))
+            StepRow(3, stringResource(R.string.guide_fire_step3))
+            StepRow(4, stringResource(R.string.guide_fire_step4))
+            StepRow(5, stringResource(R.string.guide_fire_step5))
+            StepRow(6, stringResource(R.string.guide_fire_step6))
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         Text(
-            text = stringResource(R.string.info_evacuation_steps),
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.5.sp,
-            color = Color(0xFF94A3B8),
-            modifier = Modifier.padding(bottom = 12.dp)
+            text = stringResource(R.string.guide_fire_caveat),
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 22.sp
         )
-
-        steps.forEachIndexed { index, step ->
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 10.dp),
-                shape = RoundedCornerShape(14.dp),
-                color = Color(0xFF0F172A).copy(alpha = 0.7f),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2B0E0E))
-                            .border(1.dp, StatusEmergency.copy(alpha = 0.5f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${index + 1}",
-                            color = StatusEmergency,
-                            fontWeight = FontWeight.Black,
-                            fontSize = 15.sp
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Text(
-                        text = step,
-                        color = Color.White,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        lineHeight = 20.sp
-                    )
-                }
-            }
-        }
 
         Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
 @Composable
-private fun DossierSectionTitle(icon: ImageVector, title: String) {
+private fun SectionHeader(icon: ImageVector, title: String) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(bottom = 10.dp)
+        modifier = Modifier.padding(bottom = 8.dp)
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = Color(0xFF10B981),
-            modifier = Modifier.size(16.dp)
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = title,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Black,
-            letterSpacing = 1.sp,
-            color = Color(0xFF94A3B8)
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface
         )
     }
 }
 
 @Composable
-private fun DossierRow(label: String, value: String, accent: Color = Color.White) {
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+private fun ContactRow(label: String, name: String, handle: String) {
+    val notSet = stringResource(R.string.info_not_set)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
         Text(
             text = label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color(0xFF64748B),
-            letterSpacing = 0.5.sp
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = name.ifBlank { notSet },
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (handle.isNotBlank()) {
+                Text(
+                    text = handle,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    if (value.isBlank()) return
+    Column(modifier = Modifier.padding(vertical = 8.dp)) {
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Spacer(modifier = Modifier.height(2.dp))
         Text(
             text = value,
-            fontSize = 15.sp,
-            color = accent,
-            fontWeight = FontWeight.SemiBold
+            fontSize = 17.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            lineHeight = 24.sp
         )
     }
 }
 
 @Composable
-private fun DossierDivider() {
-    Box(
+private fun StepRow(number: Int, text: String) {
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp)
-            .height(1.dp)
-            .background(Color(0xFF1E293B))
-    )
-}
-
-private fun formatContact(name: String, phoneOrHandle: String): String {
-    return if (name.isNotBlank() && phoneOrHandle.isNotBlank()) {
-        "$name  •  $phoneOrHandle"
-    } else {
-        name.ifBlank { phoneOrHandle }.ifBlank { "Not set" }
+    ) {
+        Text(
+            text = "$number",
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.width(28.dp)
+        )
+        Text(
+            text = text,
+            fontSize = 17.sp,
+            color = MaterialTheme.colorScheme.onSurface,
+            lineHeight = 25.sp,
+            modifier = Modifier.weight(1f)
+        )
     }
 }

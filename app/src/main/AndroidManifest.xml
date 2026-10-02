@@ -12,12 +12,13 @@
     <uses-feature
         android:name="android.hardware.camera.flash"
         android:required="false" />
-    <!-- Requested only when the user turns on the torch or acoustic detection, never at launch. -->
+    <!--
+      CAMERA is requested only when the user toggles the flashlight. No microphone permission:
+      the master specification explicitly excludes microphone access, so acoustic smoke-alarm
+      detection has been removed rather than made opt-in.
+    -->
     <uses-permission
         android:name="android.permission.CAMERA"
-        android:required="false" />
-    <uses-permission
-        android:name="android.permission.RECORD_AUDIO"
         android:required="false" />
 
     <!--
@@ -53,6 +54,18 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!--
+          Scheduled safety check. Exported is false and the action is internal, so nothing outside
+          the app can trigger a check-in prompt.
+        -->
+        <receiver
+            android:name=".core.checkin.CheckInAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="org.homeguard.action.CHECK_IN_DUE" />
             </intent-filter>
         </receiver>
 

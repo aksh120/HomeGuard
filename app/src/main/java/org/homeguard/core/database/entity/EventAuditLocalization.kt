@@ -13,6 +13,7 @@ object EventSummaries {
     const val EMERGENCY_SOS = "Emergency SOS Triggered"
     const val CHECK_IN = "Safety Check-In Completed"
     const val EMERGENCY_RESOLVED = "Emergency resolved by resident"
+    const val CHECK_IN_MISSED = "Scheduled check-in not answered"
 }
 
 /** Localized display text for an audit entry, falling back to the stored value. */
@@ -21,5 +22,6 @@ fun EventAuditEntity.localizedSummaryText(): String = when (summary) {
     EventSummaries.EMERGENCY_SOS -> stringResource(R.string.audit_emergency_sos)
     EventSummaries.CHECK_IN -> stringResource(R.string.audit_check_in)
     EventSummaries.EMERGENCY_RESOLVED -> stringResource(R.string.audit_emergency_resolved)
+    EventSummaries.CHECK_IN_MISSED -> stringResource(R.string.audit_check_in_missed)
     else -> summary
 }

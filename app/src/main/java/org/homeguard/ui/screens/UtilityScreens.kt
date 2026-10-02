@@ -1,7 +1,6 @@
 package org.homeguard.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,48 +11,43 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.PowerOff
-import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.homeguard.R
 import org.homeguard.core.designsystem.theme.ActionEmergency
-import org.homeguard.core.designsystem.theme.StatusEmergency
-import org.homeguard.core.designsystem.theme.StatusSafe
-import org.homeguard.core.designsystem.theme.StatusUnknown
+import org.homeguard.core.designsystem.theme.ActionWarning
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.hardware.ConnectivityInfo
 import org.homeguard.core.model.AppConfig
-import org.homeguard.ui.components.CyberBadge
 import org.homeguard.ui.components.CyberButton
 import org.homeguard.ui.components.CyberGlassCard
 import org.homeguard.ui.components.CyberTopAppBar
 
+/**
+ * Night mode (section 16).
+ *
+ * Reduced visual activity: no animation, no radar, a flat surface, and the emergency action still
+ * present and reachable. The schedule itself is configured in Settings.
+ */
 @Composable
 fun NightModeScreen(
     batteryInfo: BatteryInfo,
@@ -64,138 +58,88 @@ fun NightModeScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF030509))
-            .statusBarsPadding()
-            .padding(20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp)
     ) {
-        // Minimal Low-Luminance Top Bar
-        Row(
+        CyberTopAppBar(
+            title = stringResource(R.string.night_mode_title),
+            subtitle = stringResource(R.string.night_low_emission),
+            onBackClick = onExitNightMode
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(10.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF818CF8))
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Column {
-                    Text(
-                        text = stringResource(R.string.night_aegis_title),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.5.sp,
-                        color = Color.White
-                    )
-                    Text(
-                        text = stringResource(R.string.night_low_emission),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                        color = Color(0xFF818CF8)
-                    )
-                }
-            }
-
-            Surface(
-                onClick = onExitNightMode,
-                shape = RoundedCornerShape(20.dp),
-                color = Color(0xFF0F172A),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B))
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = stringResource(R.string.a11y_exit_night_mode),
-                        tint = Color(0xFF94A3B8),
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = stringResource(R.string.night_exit),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF94A3B8)
-                    )
-                }
-            }
-        }
-
-        // Low-Light Central Vigilance Visualizer
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .size(160.dp)
+                    .size(120.dp)
                     .clip(CircleShape)
-                    .background(Color(0xFF090D18))
-                    .border(1.5.dp, Color(0xFF818CF8).copy(alpha = 0.35f), CircleShape),
+                    .flatSurface(MaterialTheme.colorScheme.surfaceVariant),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
+                androidx.compose.material3.Icon(
                     imageVector = Icons.Default.Bedtime,
                     contentDescription = null,
-                    tint = Color(0xFF818CF8),
-                    modifier = Modifier.size(64.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Text(
-                text = stringResource(R.string.night_vigilance_active),
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Text(
-                text = stringResource(R.string.night_vigilance_desc),
-                fontSize = 14.sp,
-                color = Color(0xFF64748B)
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Telemetry Badges
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                CyberBadge(
-                    text = stringResource(R.string.battery_status_format, batteryInfo.level),
-                    color = if (batteryInfo.level <= 20) StatusEmergency else StatusSafe
-                )
-                CyberBadge(
-                    text = if (connectivityInfo.isWifiConnected) {
-                        stringResource(R.string.wifi_connected)
-                    } else {
-                        stringResource(R.string.dashboard_offline)
-                    },
-                    color = if (connectivityInfo.isWifiConnected) Color(0xFF38BDF8) else StatusUnknown
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(48.dp)
                 )
             }
         }
 
-        // Direct SOS Trigger (Always Accessible)
+        Spacer(modifier = Modifier.height(20.dp))
+
+        Text(
+            text = stringResource(R.string.night_vigilance_active),
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = stringResource(R.string.night_vigilance_desc),
+            fontSize = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            lineHeight = 24.sp,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        CyberGlassCard {
+            InfoLine(
+                stringResource(R.string.common_battery),
+                stringResource(R.string.battery_status_format, batteryInfo.level)
+            )
+            InfoLine(
+                stringResource(R.string.common_network),
+                if (connectivityInfo.isInternetAvailable) {
+                    stringResource(R.string.wifi_connected)
+                } else {
+                    stringResource(R.string.wifi_disconnected)
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
         CyberButton(
             text = stringResource(R.string.night_trigger_sos),
             onClick = onEmergencyClick,
             accentColor = ActionEmergency,
-            icon = Icons.Default.Warning,
-            minHeight = 64
+            icon = Icons.Default.Info
         )
     }
 }
 
+/** Power cut mode (section 23). Everything here works with no internet. */
 @Composable
 fun PowerCutScreen(
     batteryInfo: BatteryInfo,
@@ -205,163 +149,151 @@ fun PowerCutScreen(
     onCallPrimary: () -> Unit,
     onBackClick: () -> Unit
 ) {
-    val scrollState = rememberScrollState()
-
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF060911),
-                        Color(0xFF090D16),
-                        Color(0xFF0D1322)
-                    )
-                )
-            )
-            .statusBarsPadding()
-            .verticalScroll(scrollState)
+            .verticalScroll(rememberScrollState())
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = stringResource(R.string.power_outage_title),
+            title = stringResource(R.string.power_cut_title),
             subtitle = stringResource(R.string.power_battery_guard),
             onBackClick = onBackClick
         )
 
-        // Tactical Torch Card
-        val torchBg = if (isTorchOn) Color(0xFFFBBF24).copy(alpha = 0.2f) else Color(0xFF0B101B)
-        val torchBorder = if (isTorchOn) Color(0xFFFBBF24) else Color(0xFF1E293B)
-        val torchText = if (isTorchOn) Color(0xFFFBBF24) else Color.White
+        Spacer(modifier = Modifier.height(8.dp))
 
-        Surface(
-            onClick = onToggleTorch,
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            color = torchBg,
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, torchBorder)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.power_tactical_torch),
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.sp,
-                        color = torchText
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = if (isTorchOn) {
-                            stringResource(R.string.torch_active_hint)
-                        } else {
-                            stringResource(R.string.torch_standby_hint)
-                        },
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isTorchOn) Color(0xFFFBBF24) else Color(0xFF64748B)
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(CircleShape)
-                        .background(if (isTorchOn) Color(0xFFFBBF24) else Color(0xFF1E293B)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.FlashOn,
-                        contentDescription = null,
-                        tint = if (isTorchOn) Color.Black else Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Power Telemetry Card
         CyberGlassCard {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column {
-                    Text(
-                        text = stringResource(R.string.power_battery_telemetry),
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                        color = Color(0xFF64748B)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = stringResource(R.string.power_reserved, batteryInfo.level),
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Black,
-                        color = if (batteryInfo.level <= 20) StatusEmergency else Color.White
-                    )
-                }
-                CyberBadge(
-                    text = if (batteryInfo.isCharging) {
-                        stringResource(R.string.battery_charging)
-                    } else {
-                        stringResource(R.string.power_on_battery)
-                    },
-                    color = if (batteryInfo.isCharging) StatusSafe else Color(0xFFF59E0B)
+                Text(
+                    text = stringResource(R.string.power_tactical_torch),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
+                Surface(
+                    onClick = onToggleTorch,
+                    modifier = Modifier.height(56.dp),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                    color = if (isTorchOn) {
+                        ActionWarning
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 20.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.FlashOn,
+                            contentDescription = null,
+                            tint = if (isTorchOn) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isTorchOn) {
+                                stringResource(R.string.tile_active)
+                            } else {
+                                stringResource(R.string.tile_standby)
+                            },
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isTorchOn) {
+                                MaterialTheme.colorScheme.onPrimary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                        )
+                    }
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Quick Call Primary Contact
-        if (appConfig.primaryContact.name.isNotBlank()) {
+        CyberGlassCard {
+            Text(
+                text = stringResource(R.string.power_battery_telemetry),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = stringResource(R.string.power_reserved, batteryInfo.level),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (batteryInfo.level <= 20) {
+                    ActionEmergency
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        if (appConfig.primaryContact.phoneOrHandle.isNotBlank()) {
             CyberButton(
                 text = stringResource(R.string.power_call_contact, appConfig.primaryContact.name),
                 onClick = onCallPrimary,
-                accentColor = Color(0xFF38BDF8),
-                icon = Icons.Default.Call,
-                minHeight = 58
+                accentColor = MaterialTheme.colorScheme.primary,
+                icon = Icons.Default.Call
             )
             Spacer(modifier = Modifier.height(16.dp))
         }
 
-        // Power Cut Protocol Card
         CyberGlassCard {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.Shield,
-                    contentDescription = null,
-                    tint = Color(0xFFFBBF24),
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = stringResource(R.string.power_outage_protocol),
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp,
-                    color = Color.White
-                )
-            }
-            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = stringResource(R.string.power_outage_protocol),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(10.dp))
             Text(
                 text = stringResource(R.string.power_outage_tips),
-                fontSize = 14.sp,
-                color = Color(0xFF94A3B8),
-                lineHeight = 22.sp
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 26.sp
             )
         }
 
         Spacer(modifier = Modifier.height(30.dp))
     }
 }
+
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            fontSize = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+/** Flat surface colour, kept as a helper so screen code stays readable. */
+private fun Modifier.flatSurface(color: androidx.compose.ui.graphics.Color): Modifier =
+    this.background(color)

@@ -2,6 +2,7 @@ package org.homeguard.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -9,7 +10,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.homeguard.core.designsystem.theme.DarkBackground
 import org.homeguard.ui.screens.EmergencyActiveScreen
 import org.homeguard.ui.screens.EmergencyCountdownScreen
 import org.homeguard.ui.screens.EmergencyInfoScreen
@@ -23,7 +23,6 @@ import org.homeguard.ui.screens.SetupAndSettingsScreen
 @Composable
 fun HomeGuardApp(
     viewModel: HomeViewModel = viewModel(),
-    onRequestAcousticPermission: () -> Unit = {},
     onRequestTorchPermission: () -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -34,15 +33,13 @@ fun HomeGuardApp(
     val connectivityInfo by viewModel.connectivityInfo.collectAsState()
     val appConfig by viewModel.appConfig.collectAsState()
     val lastCheckInFormatted by viewModel.lastCheckInFormatted.collectAsState()
-    val isTorchOn by viewModel.isTorchOn.collectAsState()
+    val lastMotionAgoFormatted by viewModel.lastMotionAgoFormatted.collectAsState()
     val countdownSeconds by viewModel.countdownSeconds.collectAsState()
     val communicationError by viewModel.communicationError.collectAsState()
     val recentEvents by viewModel.recentEvents.collectAsState()
     val fallDetectedAlert by viewModel.fallDetectedAlert.collectAsState()
-    val smokeAlarmDetectedAlert by viewModel.smokeAlarmDetectedAlert.collectAsState()
-    val lastMotionAgoFormatted by viewModel.lastMotionAgoFormatted.collectAsState()
-    val isAcousticListening by viewModel.isAcousticListening.collectAsState()
-    val isAcousticEnabled by viewModel.isAcousticEnabled.collectAsState()
+    val checkInPromptVisible by viewModel.checkInPromptVisible.collectAsState()
+    val safetyNoticeVisible by viewModel.safetyNoticeVisible.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
 
     // Torch needs a runtime CAMERA grant; ask only when the user actually toggles it.
@@ -54,13 +51,12 @@ fun HomeGuardApp(
         }
     }
 
-    // Handle system back navigation safely
     BackHandler(enabled = currentDestination != NavigationDestination.Home) {
         when (currentDestination) {
             NavigationDestination.EmergencyCountdown -> viewModel.cancelEmergencyCountdown()
             NavigationDestination.EmergencyActive -> viewModel.stopAlarmAndResolve()
             NavigationDestination.Setup -> {
-                // If initial setup is incomplete, stay on setup
+                // Do not leave an incomplete setup; there is nothing behind it.
                 if (appConfig.isSetupComplete) {
                     viewModel.navigateTo(NavigationDestination.Home)
                 }
@@ -71,7 +67,7 @@ fun HomeGuardApp(
 
     Surface(
         modifier = Modifier.fillMaxSize(),
-        color = DarkBackground
+        color = MaterialTheme.colorScheme.background
     ) {
         when (currentDestination) {
             NavigationDestination.Home -> {
@@ -82,18 +78,19 @@ fun HomeGuardApp(
                     appConfig = appConfig,
                     lastCheckInFormatted = lastCheckInFormatted,
                     lastMotionAgoFormatted = lastMotionAgoFormatted,
-                    isAcousticListening = isAcousticListening,
-                    isTorchOn = isTorchOn,
                     communicationError = communicationError,
                     fallDetectedAlert = fallDetectedAlert,
-                    smokeAlarmDetectedAlert = smokeAlarmDetectedAlert,
+                    checkInPromptVisible = checkInPromptVisible,
+                    safetyNoticeVisible = safetyNoticeVisible,
                     onCheckInClick = { viewModel.confirmCheckIn() },
                     onEmergencyClick = { viewModel.startEmergencyCountdown() },
                     onCallPrimaryClick = { viewModel.initiateCallToPrimary(context) },
                     onFlashlightClick = onFlashlightClick,
                     onPingBeaconClick = { viewModel.pingCaregiverBeacon() },
                     onDismissFallAlert = { viewModel.dismissFallAlert() },
-                    onDismissSmokeAlert = { viewModel.dismissSmokeAlert() },
+                    onCheckInPromptDismiss = { viewModel.dismissCheckInPrompt() },
+                    onCheckInPromptHelp = { viewModel.requestHelpFromPrompt() },
+                    onSafetyNoticeDismiss = { viewModel.dismissSafetyNotice() },
                     onNavigate = { dest -> viewModel.navigateTo(dest) },
                     onDismissError = { viewModel.dismissCommunicationError() }
                 )
@@ -126,7 +123,7 @@ fun HomeGuardApp(
             NavigationDestination.PowerCut -> {
                 PowerCutScreen(
                     batteryInfo = batteryInfo,
-                    isTorchOn = isTorchOn,
+                    isTorchOn = viewModel.isTorchOn.collectAsState().value,
                     appConfig = appConfig,
                     onToggleTorch = onFlashlightClick,
                     onCallPrimary = { viewModel.initiateCallToPrimary(context) },
@@ -166,15 +163,7 @@ fun HomeGuardApp(
                 SetupAndSettingsScreen(
                     currentConfig = appConfig,
                     isInitialSetup = false,
-                    isAcousticEnabled = isAcousticEnabled,
                     onSaveConfig = { updated -> viewModel.saveConfig(updated) },
-                    onToggleAcoustic = {
-                        if (isAcousticEnabled) {
-                            viewModel.setAcousticEnabled(false)
-                        } else {
-                            onRequestAcousticPermission()
-                        }
-                    },
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
             }
@@ -183,15 +172,7 @@ fun HomeGuardApp(
                 SetupAndSettingsScreen(
                     currentConfig = appConfig,
                     isInitialSetup = true,
-                    isAcousticEnabled = isAcousticEnabled,
                     onSaveConfig = { updated -> viewModel.saveConfig(updated) },
-                    onToggleAcoustic = {
-                        if (isAcousticEnabled) {
-                            viewModel.setAcousticEnabled(false)
-                        } else {
-                            onRequestAcousticPermission()
-                        }
-                    },
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
             }

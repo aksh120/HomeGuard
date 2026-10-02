@@ -2,52 +2,42 @@ package org.homeguard.ui.components
 
 import android.os.SystemClock
 import android.view.HapticFeedbackConstants
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Hearing
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -56,13 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
@@ -71,10 +56,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.coroutineScope
@@ -82,19 +67,28 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.homeguard.R
 import org.homeguard.core.designsystem.theme.ActionEmergency
-import org.homeguard.core.designsystem.theme.BorderSubtle
+import org.homeguard.core.designsystem.theme.ActionImOk
 import org.homeguard.core.designsystem.theme.StatusEmergency
 import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.designsystem.theme.StatusUnknown
-import org.homeguard.core.designsystem.theme.TextPrimary
-import org.homeguard.core.designsystem.theme.TextSecondary
 import org.homeguard.core.model.SafetyStatus
 
 /** Continuous press required before the SOS triggers. */
 private const val HOLD_SOS_DURATION_MS = 2500L
 
 /**
- * Hero Sentinel Aegis Orb with breathing glow and radar orbit ticks.
+ * Minimum interactive height.
+ *
+ * The target audience is elderly and non-technical users, so every tappable element clears the
+ * 64dp comfortable-touch minimum rather than the 48dp baseline.
+ */
+private val MinTouchTarget = 64.dp
+
+/**
+ * Safety status summary with the primary "I'm OK" action.
+ *
+ * Deliberately not an animated orb. The master specification rules out decorative animation and
+ * asks for a serious, trustworthy utility, so this is a flat card with a large single action.
  */
 @Composable
 fun CyberAegisHeroOrb(
@@ -102,180 +96,82 @@ fun CyberAegisHeroOrb(
     onTapConfirmOk: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val view = LocalView.current
-    val infiniteTransition = rememberInfiniteTransition(label = "AegisOrbit")
-
-    // Pulsing aura scale
-    val auraScale by infiniteTransition.animateFloat(
-        initialValue = 0.95f,
-        targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(2400, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "AuraPulse"
-    )
-
-    // Slow radar orbit rotation
-    val orbitRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(16000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "RadarSpin"
-    )
-
-    val (primaryGlowColor, coreBgColor, statusLabel, icon) = when (status) {
-        SafetyStatus.SAFE -> Quadruple(
-            Color(0xFF10B981),
-            Color(0xFF062E22),
-            stringResource(R.string.status_safe),
-            Icons.Default.Check
-        )
-        SafetyStatus.UNKNOWN -> Quadruple(
-            Color(0xFFF59E0B),
-            Color(0xFF381A05),
-            stringResource(R.string.status_unknown),
-            Icons.AutoMirrored.Filled.Help
-        )
-        SafetyStatus.EMERGENCY -> Quadruple(
-            Color(0xFFEF4444),
-            Color(0xFF3B0B0B),
-            stringResource(R.string.status_emergency),
-            Icons.Default.Warning
-        )
+    val label = when (status) {
+        SafetyStatus.SAFE -> stringResource(R.string.status_safe)
+        SafetyStatus.UNKNOWN -> stringResource(R.string.status_unknown)
+        SafetyStatus.EMERGENCY -> stringResource(R.string.status_emergency)
+    }
+    val detail = when (status) {
+        SafetyStatus.SAFE -> stringResource(R.string.status_safe_detail)
+        SafetyStatus.UNKNOWN -> stringResource(R.string.status_unknown_detail)
+        SafetyStatus.EMERGENCY -> stringResource(R.string.status_emergency_detail)
+    }
+    val accent = when (status) {
+        SafetyStatus.SAFE -> StatusSafe
+        SafetyStatus.UNKNOWN -> StatusUnknown
+        SafetyStatus.EMERGENCY -> StatusEmergency
+    }
+    val icon = when (status) {
+        SafetyStatus.SAFE -> Icons.Default.CheckCircle
+        SafetyStatus.UNKNOWN -> Icons.AutoMirrored.Filled.HelpOutline
+        SafetyStatus.EMERGENCY -> Icons.Default.Warning
     }
 
-    val orbA11yDescription = stringResource(
-        R.string.orb_button_a11y,
-        stringResource(R.string.action_im_ok),
-        statusLabel
-    )
-
-    Box(
-        modifier = modifier
-            .size(240.dp)
-            .padding(12.dp),
-        contentAlignment = Alignment.Center
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, accent)
     ) {
-        // Outer Radar Orbit Ticks (Canvas)
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .rotate(orbitRotation)
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            val strokeWidth = 2.dp.toPx()
-            val radius = (size.minDimension / 2) - 8.dp.toPx()
-            val center = Offset(size.width / 2, size.height / 2)
-
-            // Outer subtle boundary ring
-            drawCircle(
-                color = primaryGlowColor.copy(alpha = 0.25f),
-                radius = radius,
-                center = center,
-                style = Stroke(width = strokeWidth)
-            )
-
-            // Radar arc segment
-            drawArc(
-                brush = Brush.sweepGradient(
-                    listOf(
-                        primaryGlowColor.copy(alpha = 0.0f),
-                        primaryGlowColor.copy(alpha = 0.8f),
-                        Color.White
-                    )
-                ),
-                startAngle = 0f,
-                sweepAngle = 90f,
-                useCenter = false,
-                topLeft = Offset(center.x - radius, center.y - radius),
-                size = Size(radius * 2, radius * 2),
-                style = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-            )
-        }
-
-        // Ambient Aura Glow Circle
-        Box(
-            modifier = Modifier
-                .size((190 * auraScale).dp)
-                .clip(CircleShape)
-                .background(
-                    Brush.radialGradient(
-                        colors = listOf(
-                            primaryGlowColor.copy(alpha = 0.25f),
-                            Color.Transparent
-                        )
-                    )
-                )
-        )
-
-        // Core Touch Orb (Interactive)
-        Surface(
-            modifier = Modifier
-                .size(170.dp)
-                .clip(CircleShape)
-                .border(2.5.dp, primaryGlowColor, CircleShape)
-                .semantics(mergeDescendants = true) {
-                    // Without this the primary check-in control is announced only as "SAFE".
-                    contentDescription = orbA11yDescription
-                    role = Role.Button
-                }
-                .clickable {
-                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                    onTapConfirmOk()
-                },
-            color = coreBgColor,
-            shape = CircleShape
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = primaryGlowColor,
-                    modifier = Modifier.size(38.dp)
+                    tint = accent,
+                    modifier = Modifier.size(36.dp)
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.width(12.dp))
+                // Status is conveyed by text as well as colour, never colour alone.
                 Text(
-                    text = statusLabel,
-                    color = Color.White,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.5.sp,
-                    fontFamily = FontFamily.SansSerif
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = if (status == SafetyStatus.SAFE) {
-                        stringResource(R.string.orb_verify)
-                    } else {
-                        stringResource(R.string.orb_confirm)
-                    },
-                    color = primaryGlowColor.copy(alpha = 0.9f),
-                    fontSize = 13.sp,
+                    text = label,
+                    fontSize = 30.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = detail,
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            CyberButton(
+                text = stringResource(R.string.action_im_ok),
+                onClick = onTapConfirmOk,
+                accentColor = ActionImOk,
+                icon = Icons.Default.CheckCircle,
+                minHeight = 72
+            )
         }
     }
 }
 
 /**
- * Tactical Hold-to-Charge Radial Emergency Arc.
- * Requires continuous press for [HOLD_SOS_DURATION_MS] with escalating haptic feedback to
- * prevent false alarms.
+ * Emergency trigger.
  *
- * The trigger decision is made from measured wall-clock hold time, not from the animation value.
- * The previous version compared an animated progress against a threshold, so releasing at ~99%
- * still fired the SOS.
+ * Requires a continuous press to avoid accidental activation, which matters for a device that may
+ * sit in a pocket or be bumped. Completion is measured with wall-clock time so an early release
+ * cannot trigger it.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -288,28 +184,18 @@ fun TactileHoldSosRadial(
     var progress by remember { mutableFloatStateOf(0f) }
     val sosA11yDescription = stringResource(R.string.sos_button_a11y)
 
-    val animatedProgress by animateFloatAsState(
+    // Visual fill follows measured hold time directly; no tween, so the bar cannot lag behind
+    // the actual decision and mislead the user.
+    val shown = animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(durationMillis = if (isPressing) 120 else 200, easing = LinearEasing),
-        label = "SosCharge"
+        animationSpec = tween(durationMillis = if (isPressing) 80 else 150, easing = LinearEasing),
+        label = "sosHold"
     )
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(96.dp)
-            .clip(RoundedCornerShape(18.dp))
-            .border(
-                width = 2.dp,
-                brush = Brush.horizontalGradient(
-                    listOf(
-                        Color(0xFFDC2626).copy(alpha = 0.6f),
-                        Color(0xFFEF4444),
-                        Color(0xFFDC2626).copy(alpha = 0.6f)
-                    )
-                ),
-                shape = RoundedCornerShape(18.dp)
-            )
+            .height(88.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = sosA11yDescription
                 role = Role.Button
@@ -321,13 +207,12 @@ fun TactileHoldSosRadial(
                         isPressing = true
                         coroutineScope {
                             val holdLoop = launch {
-                                var hapticStep = 0
                                 while (true) {
                                     val held = SystemClock.elapsedRealtime() - start
                                     progress = (held.toFloat() / HOLD_SOS_DURATION_MS)
                                         .coerceIn(0f, 1f)
                                     if (held >= HOLD_SOS_DURATION_MS) break
-                                    // Escalating feedback: firmer taps as the hold nears completion.
+                                    // Firmer feedback as the hold approaches completion.
                                     view.performHapticFeedback(
                                         if (held > HOLD_SOS_DURATION_MS / 2) {
                                             HapticFeedbackConstants.CONTEXT_CLICK
@@ -335,8 +220,7 @@ fun TactileHoldSosRadial(
                                             HapticFeedbackConstants.KEYBOARD_TAP
                                         }
                                     )
-                                    hapticStep++
-                                    delay(if (hapticStep % 4 == 0) 150L else 300L)
+                                    delay(250L)
                                 }
                             }
                             tryAwaitRelease()
@@ -354,91 +238,49 @@ fun TactileHoldSosRadial(
                     }
                 )
             },
-        color = Color(0xFF140707),
-        shape = RoundedCornerShape(18.dp)
+        color = ActionEmergency,
+        shape = RoundedCornerShape(12.dp)
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
-            // Radial Progress Sweep Fill
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val fillWidth = size.width * animatedProgress
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(
-                            Color(0xFF991B1B).copy(alpha = 0.4f),
-                            Color(0xFFDC2626).copy(alpha = 0.85f)
-                        )
-                    ),
-                    topLeft = Offset.Zero,
-                    size = Size(fillWidth, size.height)
-                )
-            }
-
-            // Foreground Content
-            Row(
+            // Flat progress bar rather than a sweeping gradient fill.
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF7F1D1D))
-                            .border(2.dp, Color(0xFFEF4444), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth(shown.value)
+                    .height(6.dp)
+                    .background(Color.White.copy(alpha = 0.85f))
+            )
 
-                    Spacer(modifier = Modifier.width(16.dp))
-
-                    Column {
-                        Text(
-                            text = if (isPressing) stringResource(R.string.sos_holding)
-                            else stringResource(R.string.sos_hold_cta),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Black,
-                            color = Color.White,
-                            letterSpacing = 0.5.sp
-                        )
-                        Text(
-                            text = if (isPressing) {
-                                stringResource(
-                                    R.string.sos_progress_cancel,
-                                    (animatedProgress * 100).toInt()
-                                )
-                            } else {
-                                stringResource(R.string.sos_hold_hint)
-                            },
-                            fontSize = 14.sp,
-                            color = if (isPressing) Color(0xFFFCA5A5) else Color(0xFF9CA3AF)
-                        )
-                    }
-                }
-
-                // Percent readout badge
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xFF280808),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF7F1D1D))
-                ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
                     Text(
-                        text = "${(animatedProgress * 100).toInt()}%",
-                        color = Color.White,
-                        fontSize = 14.sp,
+                        text = if (isPressing) {
+                            stringResource(R.string.sos_holding)
+                        } else {
+                            stringResource(R.string.sos_hold_cta)
+                        },
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        color = Color.White
+                    )
+                    Text(
+                        text = if (isPressing) {
+                            stringResource(R.string.sos_progress_cancel, (shown.value * 100).toInt())
+                        } else {
+                            stringResource(R.string.sos_hold_hint)
+                        },
+                        fontSize = 15.sp,
+                        color = Color.White.copy(alpha = 0.9f)
                     )
                 }
             }
@@ -446,174 +288,100 @@ fun TactileHoldSosRadial(
     }
 }
 
-/**
- * High-density Telemetry Cockpit Strip with futuristic live gauges.
- */
+/** Device telemetry: battery, network, and recent movement. Flat rows, no gauges. */
 @Composable
 fun TelemetryCockpitHUD(
     batteryLevel: Int,
     isCharging: Boolean,
     wifiConnected: Boolean,
-    isAcousticListening: Boolean,
     lastMotionAgoFormatted: String,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF0B101B))
-            .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(16.dp))
-            .padding(14.dp)
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.telemetry_array),
-                fontSize = 13.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 1.sp,
-                color = Color(0xFF64748B)
+        Column(modifier = Modifier.padding(vertical = 4.dp)) {
+            TelemetryRow(
+                icon = Icons.Default.Bolt,
+                label = stringResource(R.string.common_battery),
+                value = stringResource(R.string.battery_status_format, batteryLevel),
+                detail = if (isCharging) {
+                    stringResource(R.string.battery_charging)
+                } else {
+                    stringResource(R.string.battery_not_charging)
+                },
+                valueColor = if (batteryLevel <= 20) StatusEmergency else null
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(if (wifiConnected) StatusSafe else StatusUnknown)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (wifiConnected) {
-                        stringResource(R.string.dashboard_online)
-                    } else {
-                        stringResource(R.string.dashboard_offline)
-                    },
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (wifiConnected) StatusSafe else StatusUnknown
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // 4 Cockpit Gauge Tiles
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Tile 1: Battery Power Grid
-            CockpitTile(
-                icon = if (isCharging) Icons.Default.Bolt else Icons.Default.Bolt,
-                title = stringResource(R.string.common_power),
-                value = stringResource(R.string.battery_percent, batteryLevel),
-                sub = if (isCharging) stringResource(R.string.battery_charging)
-                else stringResource(R.string.battery_not_charging),
-                accentColor = if (batteryLevel <= 20) StatusEmergency else StatusSafe,
-                modifier = Modifier.weight(1f)
-            )
-
-            // Tile 2: Signal Array
-            CockpitTile(
+            TelemetryRow(
                 icon = if (wifiConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                title = stringResource(R.string.common_network),
-                value = if (wifiConnected) stringResource(R.string.wifi_connected)
-                else stringResource(R.string.wifi_disconnected),
-                sub = if (wifiConnected) stringResource(R.string.network_band)
-                else stringResource(R.string.network_local_only),
-                accentColor = if (wifiConnected) Color(0xFF38BDF8) else StatusUnknown,
-                modifier = Modifier.weight(1f)
+                label = stringResource(R.string.common_network),
+                value = if (wifiConnected) {
+                    stringResource(R.string.wifi_connected)
+                } else {
+                    stringResource(R.string.wifi_disconnected)
+                },
+                valueColor = if (wifiConnected) null else StatusUnknown
             )
-
-            // Tile 3: Passive Presence (Motion)
-            CockpitTile(
+            TelemetryRow(
                 icon = Icons.Default.Sensors,
-                title = stringResource(R.string.common_presence),
-                value = stringResource(R.string.presence_active),
-                sub = lastMotionAgoFormatted,
-                accentColor = Color(0xFFA855F7),
-                modifier = Modifier.weight(1f)
-            )
-
-            // Tile 4: Acoustic Ear (Smoke Detector)
-            CockpitTile(
-                icon = Icons.Default.Hearing,
-                title = stringResource(R.string.common_acoustic),
-                value = if (isAcousticListening) stringResource(R.string.acoustic_guard)
-                else stringResource(R.string.acoustic_idle),
-                sub = stringResource(R.string.acoustic_tone),
-                accentColor = Color(0xFFF59E0B),
-                modifier = Modifier.weight(1f)
+                label = stringResource(R.string.common_presence),
+                value = lastMotionAgoFormatted
             )
         }
     }
 }
 
+/** Single telemetry line. Exposed for screens that need to reuse it. */
 @Composable
-private fun CockpitTile(
+private fun TelemetryRow(
     icon: ImageVector,
-    title: String,
+    label: String,
     value: String,
-    sub: String,
-    accentColor: Color,
-    modifier: Modifier = Modifier
+    detail: String? = null,
+    valueColor: Color? = null
 ) {
-    Surface(
-        modifier = modifier.height(84.dp),
-        shape = RoundedCornerShape(10.dp),
-        color = Color(0xFF111827),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1F2937))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 7.dp, vertical = 7.dp),
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF94A3B8),
-                    letterSpacing = 0.5.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(12.dp)
-                )
-            }
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = label,
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Column(horizontalAlignment = Alignment.End) {
             Text(
                 text = value,
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = Color.White,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End
             )
-            Text(
-                text = sub,
-                fontSize = 12.sp,
-                color = Color(0xFF64748B),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+            if (detail != null) {
+                Text(
+                    text = detail,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End
+                )
+            }
         }
     }
 }
 
+/** Screen title bar with an optional back affordance. */
 @Composable
 fun CyberTopAppBar(
     title: String,
@@ -625,64 +393,60 @@ fun CyberTopAppBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 16.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+            .padding(bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f, fill = false)
-        ) {
-            if (onBackClick != null) {
-                Surface(
-                    onClick = onBackClick,
-                    modifier = Modifier.size(42.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0xFF0F172A),
-                    border = BorderStroke(1.dp, Color(0xFF1E293B))
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.a11y_back),
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.width(14.dp))
-            }
-            Column {
-                Text(
-                    text = title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.sp,
-                    color = Color.White
-                )
-                if (subtitle != null) {
-                    Text(
-                        text = subtitle,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        color = Color(0xFF10B981)
+        if (onBackClick != null) {
+            Surface(
+                onClick = onBackClick,
+                modifier = Modifier
+                    .size(MinTouchTarget)
+                    .semantics { role = Role.Button },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = stringResource(R.string.a11y_back),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }
+            Spacer(modifier = Modifier.width(12.dp))
         }
-        if (action != null) {
-            action()
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
+        action?.invoke()
     }
 }
 
+/**
+ * Flat content container.
+ *
+ * Retains the historical name for call-site compatibility, but no longer blurs or tints: it is a
+ * plain surface with a hairline border, per the "restrained colors, subtle elevation" guidance.
+ */
 @Composable
 fun CyberGlassCard(
     modifier: Modifier = Modifier,
-    borderColor: Color = Color(0xFF1E293B),
-    backgroundColor: Color = Color(0xFF0B101B),
-    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(16.dp),
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant,
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
+    shape: Shape = RoundedCornerShape(12.dp),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -691,41 +455,50 @@ fun CyberGlassCard(
         color = backgroundColor,
         border = BorderStroke(1.dp, borderColor)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            content = content
-        )
+        Column(modifier = Modifier.padding(16.dp), content = content)
     }
 }
 
+/**
+ * Primary action button.
+ *
+ * [minHeight] defaults to the comfortable touch target rather than a compact default, because the
+ * emergency and check-in actions must be easy to hit.
+ */
 @Composable
 fun CyberButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    accentColor: Color = Color(0xFF10B981),
+    accentColor: Color = MaterialTheme.colorScheme.primary,
     icon: ImageVector? = null,
     isSecondary: Boolean = false,
-    minHeight: Int = 54
+    minHeight: Int = 64
 ) {
-    val bg = if (isSecondary) Color(0xFF0F172A) else accentColor.copy(alpha = 0.16f)
-    val border = if (isSecondary) Color(0xFF1E293B) else accentColor.copy(alpha = 0.6f)
-    val textColor = if (isSecondary) Color(0xFFCBD5E1) else accentColor
+    val containerColor = if (isSecondary) {
+        MaterialTheme.colorScheme.surfaceVariant
+    } else {
+        accentColor
+    }
+    val contentColor = if (isSecondary) {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    } else {
+        Color.White
+    }
 
     Surface(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(minHeight.dp)
+            .heightIn(min = minHeight.dp)
             .semantics { role = Role.Button },
-        shape = RoundedCornerShape(14.dp),
-        color = bg,
-        border = BorderStroke(1.dp, border)
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp),
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -733,22 +506,23 @@ fun CyberButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = textColor,
-                    modifier = Modifier.size(20.dp)
+                    tint = contentColor,
+                    modifier = Modifier.size(22.dp)
                 )
                 Spacer(modifier = Modifier.width(10.dp))
             }
             Text(
                 text = text,
-                color = textColor,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.ExtraBold,
-                letterSpacing = 0.5.sp
+                color = contentColor,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
             )
         }
     }
 }
 
+/** Small status chip. */
 @Composable
 fun CyberBadge(
     text: String,
@@ -758,12 +532,12 @@ fun CyberBadge(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(6.dp),
         color = color.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.35f))
+        border = BorderStroke(1.dp, color.copy(alpha = 0.4f))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (icon != null) {
@@ -771,21 +545,26 @@ fun CyberBadge(
                     imageVector = icon,
                     contentDescription = null,
                     tint = color,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(14.dp)
                 )
-                Spacer(modifier = Modifier.width(4.dp))
+                Spacer(modifier = Modifier.width(6.dp))
             }
             Text(
                 text = text,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-                color = color,
-                letterSpacing = 0.5.sp
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = color
             )
         }
     }
 }
 
+/**
+ * Home-screen action entry.
+ *
+ * A plain full-width row rather than a fixed grid tile: a predictable reading order is easier to
+ * scan than a masonry of equal boxes, and it lets labels wrap instead of truncating.
+ */
 @Composable
 fun CyberActionTile(
     icon: ImageVector,
@@ -798,53 +577,51 @@ fun CyberActionTile(
     Surface(
         onClick = onClick,
         modifier = modifier
-            .height(72.dp)
+            .fillMaxWidth()
+            .heightIn(min = MinTouchTarget)
             .semantics(mergeDescendants = true) {
                 contentDescription = "$title. $status"
                 role = Role.Button
             },
-        shape = RoundedCornerShape(14.dp),
-        color = Color(0xFF0F172A),
-        border = BorderStroke(1.dp, Color(0xFF1E293B))
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = title,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    letterSpacing = 0.5.sp,
-                    color = Color.White
-                )
-                Text(
-                    text = status,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = accentColor
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(accentColor.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(14.dp))
+            Text(
+                text = title,
+                fontSize = 17.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Text(
+                text = status,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = accentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
 
-private data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
+/** Fixed-size spacer helper retained for call-site readability. */
+@Composable
+fun VerticalGap(height: Dp) {
+    Spacer(modifier = Modifier.height(height))
+}

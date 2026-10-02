@@ -3,29 +3,27 @@
     <string name="app_name">HomeGuard</string>
     <string name="app_tagline">Open-source home safety, made simple.</string>
 
-    <!-- Safety Statuses -->
-    <string name="status_safe">SAFE</string>
-    <string name="status_unknown">UNKNOWN</string>
-    <string name="status_emergency">EMERGENCY</string>
+    <!-- Safety statuses. Always shown as text, never colour alone (section 31). -->
+    <string name="status_safe">Safe</string>
+    <string name="status_unknown">Not confirmed</string>
+    <string name="status_emergency">Emergency</string>
 
-    <string name="status_safe_detail">Safety confirmed by recent check-in</string>
-    <string name="status_unknown_detail">Awaiting safety confirmation</string>
-    <string name="status_emergency_detail">Active emergency alert in progress</string>
+    <string name="status_safe_detail">You confirmed you are okay recently.</string>
+    <string name="status_unknown_detail">Waiting for your next check-in.</string>
+    <string name="status_emergency_detail">An emergency alert is active.</string>
 
     <!-- Telemetry -->
-    <string name="wifi_connected">Wi-Fi connected</string>
-    <string name="wifi_disconnected">Wi-Fi disconnected</string>
-    <string name="battery_status_format">Battery %1$d%%</string>
+    <string name="wifi_connected">Connected</string>
+    <string name="wifi_disconnected">Not connected</string>
+    <string name="battery_status_format">%1$d%%</string>
     <string name="battery_charging">Charging</string>
     <string name="battery_not_charging">Not charging</string>
-    <string name="battery_low_warning">Low Battery</string>
-    <string name="battery_low_body">Battery is at %1$d%%. Consider connecting a charger.</string>
-    <string name="battery_critical_warning">Critical Battery</string>
+    <string name="battery_low_warning">Low battery</string>
+    <string name="battery_low_body">Battery is at %1$d%%. Connect a charger if you can.</string>
+    <string name="battery_critical_warning">Critical battery</string>
     <string name="battery_critical_body">Battery is at %1$d%%. Emergency features may stop working soon.</string>
-    <string name="monitoring_active">Monitoring active</string>
-    <string name="monitoring_paused">Monitoring paused</string>
     <string name="last_checkin_format">Last check-in: %1$s</string>
-    <string name="last_checkin_none">No recent check-in</string>
+    <string name="last_checkin_none">No check-in yet</string>
     <string name="last_motion_just_now">Just now</string>
     <string name="last_motion_minutes">%1$d min ago</string>
     <string name="last_motion_hours">%1$d hr ago</string>
@@ -33,292 +31,263 @@
 
     <!-- Actions -->
     <string name="action_im_ok">I\'M OK</string>
-    <string name="action_emergency">EMERGENCY</string>
-    <string name="action_call_primary">CALL PRIMARY CONTACT</string>
-    <string name="action_flashlight">FLASHLIGHT</string>
-    <string name="action_night_mode">NIGHT MODE</string>
-    <string name="action_power_cut">POWER CUT</string>
-    <string name="action_emergency_info">EMERGENCY INFO</string>
-    <string name="action_settings">SETTINGS</string>
-    <string name="action_cancel">CANCEL</string>
-    <string name="action_confirm">CONFIRM</string>
-    <string name="action_save">SAVE</string>
-    <string name="action_stop_alarm">STOP ALARM</string>
-    <string name="action_i_need_help">I NEED HELP</string>
+    <string name="action_emergency">Emergency</string>
+    <string name="action_call_primary">Call primary contact</string>
+    <string name="action_flashlight">Flashlight</string>
+    <string name="action_night_mode">Night mode</string>
+    <string name="action_power_cut">Power cut</string>
+    <string name="action_emergency_info">Emergency information</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_confirm">OK</string>
+    <string name="action_save">Save</string>
+    <string name="action_stop_alarm">Stop alarm</string>
+    <string name="action_i_need_help">I need help</string>
 
-    <!-- Emergency Countdown & Screen -->
-    <string name="emergency_alert_title">EMERGENCY ALERT</string>
-    <string name="emergency_sending_in">Sending in…</string>
-    <string name="emergency_sent_title">EMERGENCY</string>
-    <string name="emergency_sent_message">Alert sent. Stay near the phone.</string>
-    <string name="emergency_offline_notice">NO INTERNET\n\nYour emergency alert has been saved locally.\nIt will be sent automatically when the connection returns.</string>
+    <!-- Emergency countdown and screen -->
+    <string name="emergency_alert_title">Emergency alert</string>
+    <string name="emergency_sending_in">Sending in</string>
+    <string name="emergency_sent_title">Emergency</string>
+    <string name="emergency_sent_message">Your alert has been sent. Stay near the phone.</string>
+    <string name="emergency_countdown_initiating">Preparing your alert</string>
+    <string name="emergency_abort">Cancel alert</string>
+    <string name="emergency_abort_hint">Tap to cancel and go back</string>
+    <string name="emergency_broadcasted">Alert sent</string>
+    <string name="emergency_broadcasted_detail">The alarm is sounding and your contacts have been notified.</string>
+    <string name="emergency_offline_armed">Alert saved, not yet sent</string>
+    <string name="emergency_offline_detail">There is no internet connection. Your alert is stored on this phone and will send as soon as you are back online.</string>
+    <string name="emergency_resolve_caption">Stops the siren and records that you are safe</string>
 
-    <!-- Safety Check-In Prompt -->
-    <string name="checkin_dialog_title">Safety Check</string>
+    <!-- Scheduled safety check (section 14) -->
+    <string name="checkin_dialog_title">Safety check</string>
     <string name="checkin_dialog_message">Are you okay?</string>
     <string name="checkin_recorded">Safety check confirmed</string>
-    <string name="checkin_missed_notification_title">Safety Check Missed</string>
-    <string name="checkin_missed_notification_body">A scheduled safety check has not been completed.</string>
+    <string name="checkin_missed_notification_title">Safety check not answered</string>
+    <string name="checkin_missed_notification_body">A scheduled safety check was not answered in time. This does not mean there is an emergency.</string>
 
-    <!-- Power Cut Mode -->
-    <string name="power_cut_title">POWER CUT MODE</string>
-    <string name="power_cut_desc">Essential utilities during a power outage.</string>
-    <string name="torch_on">Torch ON</string>
-    <string name="torch_off">Torch OFF</string>
+    <!-- Power cut mode -->
+    <string name="power_cut_title">Power cut</string>
+    <string name="power_battery_guard">Battery saver active</string>
+    <string name="power_tactical_torch">Flashlight</string>
+    <string name="power_battery_telemetry">Battery</string>
+    <string name="power_call_contact">Call %1$s</string>
+    <string name="power_outage_protocol">During a power cut</string>
+    <string name="power_outage_tips">• Keep the refrigerator closed to preserve food.\n• Unplug sensitive electronics to protect them from surges.\n• Use the flashlight sparingly to save battery.\n• HomeGuard keeps working without internet.</string>
+    <string name="power_reserved">%1$d%% remaining</string>
+    <string name="power_on_battery">On battery</string>
+    <string name="torch_active_hint">On. Tap to turn off.</string>
+    <string name="torch_standby_hint">Off. Tap to turn on.</string>
 
-    <!-- Night Mode -->
-    <string name="night_mode_title">NIGHT MODE</string>
-    <string name="night_mode_active_notice">Night Mode is active. Emergency features remain available.</string>
+    <!-- Night mode (section 16) -->
+    <string name="night_mode_title">Night mode</string>
+    <string name="night_low_emission">Dimmed screen</string>
+    <string name="night_exit">Exit</string>
+    <string name="night_vigilance_active">Night mode is on</string>
+    <string name="night_vigilance_desc">The screen is dimmed. Monitoring and the emergency button still work.</string>
+    <string name="night_trigger_sos">Emergency</string>
 
-    <!-- Emergency Information Screen -->
-    <string name="info_title">Emergency Information</string>
+    <!-- Emergency information (section 21) -->
+    <string name="info_title">Emergency information</string>
     <string name="info_contacts_header">Contacts</string>
-    <string name="info_primary_contact">Primary Contact</string>
-    <string name="info_secondary_contact">Secondary Contact</string>
-    <string name="info_emergency_contact">Emergency Contact</string>
-    <string name="info_local_emergency_services">Local Emergency Services</string>
-    <string name="info_medical_header">Medical Information (Optional)</string>
+    <string name="info_primary_contact">Primary contact</string>
+    <string name="info_secondary_contact">Secondary contact</string>
+    <string name="info_emergency_contact">Emergency contact</string>
+    <string name="info_local_emergency_services">Local emergency services</string>
+    <string name="info_medical_header">Medical details (optional)</string>
     <string name="info_allergies">Allergies</string>
-    <string name="info_blood_group">Blood Group</string>
-    <string name="info_medications">Current Medications</string>
-    <string name="info_doctor">Physician / Clinic</string>
-    <string name="info_medical_notes">Important Medical Notes</string>
-    <string name="info_home_header">Home Information</string>
-    <string name="info_home_address">Home Address</string>
-    <string name="info_building_security">Building / Security Contact</string>
-    <string name="info_home_instructions">Access &amp; Entry Instructions</string>
+    <string name="info_blood_group">Blood group</string>
+    <string name="info_medications">Medications</string>
+    <string name="info_doctor">Doctor or clinic</string>
+    <string name="info_medical_notes">Medical notes</string>
+    <string name="info_home_header">Home</string>
+    <string name="info_home_address">Address</string>
+    <string name="info_building_security">Building security</string>
+    <string name="info_home_instructions">Access instructions</string>
+    <string name="info_no_medical">No medical details recorded. Add them in Settings if they would help a first responder.</string>
+    <string name="info_not_set">Not set</string>
 
-    <!-- Fire Emergency Guide -->
-    <string name="guide_fire_title">FIRE EMERGENCY GUIDE</string>
-    <string name="guide_fire_step1">Stay calm and do not panic.</string>
-    <string name="guide_fire_step2">Move away from smoke and heat immediately.</string>
-    <string name="guide_fire_step3">Alert household members and exit the building.</string>
-    <string name="guide_fire_step4">Call local emergency services from a safe location.</string>
-    <string name="guide_fire_step5">Do not use elevators; use stairs.</string>
-    <string name="guide_fire_step6">Follow instructions from professional emergency responders.</string>
+    <!-- Fire guide (section 22) -->
+    <string name="guide_fire_title">Fire emergency</string>
+    <string name="guide_fire_step1">Stay calm.</string>
+    <string name="guide_fire_step2">Move away from smoke and heat.</string>
+    <string name="guide_fire_step3">Alert others in the building and get out.</string>
+    <string name="guide_fire_step4">Call local emergency services from somewhere safe.</string>
+    <string name="guide_fire_step5">Use the stairs, not the lift.</string>
+    <string name="guide_fire_step6">Follow instructions from emergency responders.</string>
+    <string name="guide_fire_caveat">This guide is general information, not professional emergency advice. Follow your local emergency service\'s instructions.</string>
 
-    <!-- Communication -->
-    <string name="call_failed_title">Call Unavailable</string>
-    <string name="call_failed_no_contact">No contact number or address configured. Please configure in settings.</string>
-    <string name="call_failed_no_service">Internet and cellular calling are currently unavailable. Emergency alert is queued.</string>
+    <!-- Communication (section 26) -->
+    <string name="call_failed_title">Could not start a call</string>
+    <string name="call_failed_no_contact">No contact number or address is set. Add one in Settings.</string>
+    <string name="call_failed_no_service">No way to reach anyone right now. Your alert is still saved.</string>
 
-    <!-- Monitoring Dashboard -->
-    <string name="dashboard_title">Monitoring Dashboard</string>
-    <string name="dashboard_device_state">Device State</string>
-    <string name="dashboard_online">ONLINE</string>
-    <string name="dashboard_offline">OFFLINE</string>
-    <string name="dashboard_recent_events">Recent Events</string>
-    <string name="dashboard_no_events">No recent events recorded</string>
-
-    <!-- Personalization & Setup -->
-
-    <!-- Notification Channels -->
-    <string name="channel_emergency_name">Emergency Alerts</string>
-    <string name="channel_emergency_desc">High-priority alerts for active emergency triggers</string>
-    <string name="channel_checkin_name">Safety Check-Ins</string>
-    <string name="channel_checkin_desc">Scheduled check-in reminders and missed check-in alerts</string>
-    <string name="channel_telemetry_name">Device &amp; Battery Telemetry</string>
-    <string name="channel_telemetry_desc">Notifications for low battery and device connectivity changes</string>
+    <!-- Notification channels -->
+    <string name="channel_emergency_name">Emergency alerts</string>
+    <string name="channel_emergency_desc">High-priority alerts when an emergency is triggered</string>
+    <string name="channel_checkin_name">Safety checks</string>
+    <string name="channel_checkin_desc">Scheduled check-in reminders and unanswered check-ins</string>
+    <string name="channel_telemetry_name">Device and battery</string>
+    <string name="channel_telemetry_desc">Low battery and connection alerts</string>
 
     <!-- Notifications -->
-    <string name="notif_emergency_queued_title">Emergency alert saved</string>
-    <string name="notif_emergency_queued_body">No internet connection. Your alert is stored on this phone and will send automatically.</string>
+    <string name="notif_emergency_queued_title">Alert saved</string>
+    <string name="notif_emergency_queued_body">No internet right now. Your alert is stored on this phone and will send automatically.</string>
     <string name="notif_checkin_title">Check-in recorded</string>
     <string name="notif_checkin_body">Your contacts can see that you are okay.</string>
-    <string name="notif_acoustic_listening_title">Listening for smoke alarms</string>
-    <string name="notif_acoustic_listening_body">HomeGuard is using the microphone to detect a smoke alarm tone.</string>
-
-    <string name="orb_verify">TAP TO VERIFY</string>
-    <string name="orb_confirm">TAP TO CONFIRM</string>
-    <string name="orb_button_a11y">%1$s button. Current safety status: %2$s. Activates to confirm you are safe.</string>
 
     <!-- Emergency trigger -->
-    <string name="sos_hold_cta">HOLD FOR EMERGENCY</string>
-    <string name="sos_holding">HOLDING FOR SOS…</string>
-    <string name="sos_hold_hint">Press and hold for 2.5 seconds to send an emergency alert</string>
-    <string name="sos_progress_cancel">%1$d%% complete • release to cancel</string>
-    <string name="sos_button_a11y">Emergency button. Press and hold for 2.5 seconds to send an emergency alert. Releasing early cancels.</string>
-    <string name="emergency_resolve_caption">Stops the siren and records a check-in that you are safe</string>
-
-    <string name="network_band">Connected</string>
-    <string name="network_local_only">Local only</string>
-    <string name="presence_active">Active</string>
-    <string name="acoustic_guard">On</string>
-    <string name="acoustic_idle">Off</string>
-    <string name="acoustic_tone">Smoke tone</string>
+    <string name="sos_hold_cta">Hold for emergency</string>
+    <string name="sos_holding">Keep holding</string>
+    <string name="sos_hold_hint">Press and hold for 2.5 seconds to send an alert. Let go to cancel.</string>
+    <string name="sos_progress_cancel">%1$d%% — release to cancel</string>
+    <string name="sos_button_a11y">Emergency button. Press and hold for 2.5 seconds to send an emergency alert. Release early to cancel.</string>
 
     <!-- Audit trail summaries -->
-    <string name="audit_emergency_sos">Emergency SOS Triggered</string>
-    <string name="audit_check_in">Safety Check-In Completed</string>
-    <string name="audit_emergency_resolved">Emergency resolved by resident</string>
+    <string name="audit_emergency_sos">Emergency alert sent</string>
+    <string name="audit_check_in">Safety check confirmed</string>
+    <string name="audit_emergency_resolved">Emergency stopped by the resident</string>
+    <string name="audit_check_in_missed">Scheduled check-in not answered</string>
 
     <!-- Common labels -->
-    <string name="common_network">NETWORK</string>
-    <string name="common_battery">BATTERY</string>
-    <string name="common_power">POWER</string>
-    <string name="common_presence">PRESENCE</string>
-    <string name="common_acoustic">ACOUSTIC</string>
+    <string name="common_network">Internet</string>
+    <string name="common_battery">Battery</string>
+    <string name="common_power">Power</string>
+    <string name="common_presence">Movement</string>
 
     <!-- Accessibility descriptions -->
     <string name="a11y_back">Back</string>
     <string name="a11y_settings">Settings</string>
-    <string name="a11y_app_logo">HomeGuard</string>
-    <string name="a11y_ping_beacon">Play caregiver radar beacon</string>
-    <string name="a11y_exit_night_mode">Exit Night Mode</string>
+    <string name="a11y_ping_beacon">Send a short tone to your caregiver</string>
+    <string name="a11y_exit_night_mode">Exit night mode</string>
+    <string name="a11y_status_button">%1$s button. Status: %2$s. Activates to confirm you are okay.</string>
 
-    <string name="call_direct">DIRECT</string>
-    <string name="tile_active">ACTIVE</string>
-    <string name="tile_standby">STANDBY</string>
-    <string name="tile_dark_hud">DARK HUD</string>
-    <string name="tile_battery_guard">BATTERY GUARD</string>
-    <string name="tile_offline_vault">OFFLINE VAULT</string>
-    <string name="tile_offline_guide">OFFLINE GUIDE</string>
-    <string name="tile_ping_chirp">PING CHIRP</string>
-    <string name="tile_event_stream">EVENT STREAM</string>
+    <!-- Home screen tiles -->
+    <string name="call_direct">Direct</string>
+    <string name="call_not_set">Not set</string>
+    <string name="tile_active">On</string>
+    <string name="tile_standby">Ready</string>
+    <string name="tile_battery_guard">Battery saver</string>
+    <string name="tile_offline_vault">Stored on this phone</string>
+    <string name="tile_offline_guide">Offline guide</string>
+    <string name="tile_ping_chirp">Send tone</string>
+    <string name="tile_event_stream">Local log</string>
 
     <!-- Home screen -->
-    <string name="home_app_title">HOMEGUARD</string>
-    <string name="home_sentinel_active">SENTINEL ACTIVE • HOME</string>
-    <string name="home_utility_cockpit">TACTICAL UTILITY COCKPIT</string>
-    <string name="home_night_aegis">NIGHT AEGIS</string>
-    <string name="home_power_outage">POWER OUTAGE</string>
-    <string name="home_safety_dossier">SAFETY DOSSIER</string>
-    <string name="home_fire_evacuation">FIRE EVACUATION</string>
-    <string name="home_radar_beacon">RADAR BEACON</string>
-    <string name="home_sentinel_audit">SENTINEL AUDIT</string>
-    <string name="home_torch">FLASHLIGHT</string>
+    <string name="home_app_title">HomeGuard</string>
+    <string name="home_utility_cockpit">Actions</string>
+    <string name="home_night_aegis">Night mode</string>
+    <string name="home_power_outage">Power cut</string>
+    <string name="home_safety_dossier">Emergency information</string>
+    <string name="home_fire_evacuation">Fire guide</string>
+    <string name="home_radar_beacon">Signal my contact</string>
+    <string name="home_sentinel_audit">Recent activity</string>
+    <string name="home_torch_low_battery">Battery low</string>
 
     <!-- Fall detection dialog -->
-    <string name="fall_alert_title">Sudden Fall Impact Detected</string>
-    <string name="fall_alert_body">A sudden impact and stillness were detected on this device. Are you okay or do you need assistance?</string>
+    <string name="fall_alert_title">Possible fall detected</string>
+    <string name="fall_alert_body">The phone felt a sudden impact and then stayed still. Are you okay?</string>
     <string name="fall_alert_confirm">I\'M OK</string>
-    <string name="fall_alert_sos">SEND EMERGENCY SOS</string>
+    <string name="fall_alert_sos">Send an alert</string>
 
-    <!-- Smoke alarm dialog -->
-    <string name="smoke_alert_title">Smoke Alarm Pattern Detected</string>
-    <string name="smoke_alert_body">The acoustic listener detected a high-pitch smoke alarm pattern nearby. Please verify your safety immediately.</string>
-    <string name="smoke_alert_sos">TRIGGER SOS ALARM</string>
-    <string name="smoke_alert_false">I\'M SAFE / FALSE ALARM</string>
-
-    <!-- Emergency countdown -->
-    <string name="emergency_countdown_initiating">CRITICAL OVERRIDE INITIATING</string>
-    <string name="emergency_seconds_label">SECONDS</string>
-    <string name="emergency_broadcasted">EMERGENCY SOS BROADCASTED</string>
-    <string name="emergency_broadcasted_detail">Local siren active and cloud emergency dispatch triggered.</string>
-    <string name="emergency_offline_armed">OFFLINE SOS ARMED</string>
-    <string name="emergency_offline_detail">Local siren sounding. Event queued safely and will sync immediately upon reconnection.</string>
-    <string name="emergency_abort">ABORT EMERGENCY</string>
-    <string name="emergency_abort_hint">Tap to cancel the alert and return home</string>
-
-    <!-- Night mode -->
-    <string name="night_aegis_title">NIGHT AEGIS</string>
-    <string name="night_low_emission">LOW-EMISSION HUD</string>
-    <string name="night_exit">EXIT</string>
-    <string name="night_vigilance_active">Night Mode Active</string>
-    <string name="night_vigilance_desc">Sensors and smoke detection stay on with minimal screen brightness</string>
-    <string name="night_trigger_sos">TRIGGER EMERGENCY SOS</string>
-
-    <!-- Power outage -->
-    <string name="power_outage_title">POWER OUTAGE</string>
-    <string name="power_battery_guard">BATTERY GUARD ACTIVE</string>
-    <string name="power_tactical_torch">TACTICAL TORCH</string>
-    <string name="power_battery_telemetry">BATTERY TELEMETRY</string>
-    <string name="power_call_contact">CALL %1$s</string>
-    <string name="power_outage_protocol">OUTAGE PROTOCOL &amp; CONSERVATION</string>
-    <string name="power_outage_tips">• Keep refrigerator/freezer sealed to preserve perishables.\n• Unplug sensitive high-draw electronics to prevent power surge damage.\n• Use the device torch sparingly to maximize emergency battery reserve.\n• HomeGuard offline sensors remain active without Wi-Fi.</string>
-    <string name="power_reserved">%1$d%% RESERVED</string>
-    <string name="power_on_battery">ON BATTERY</string>
-    <string name="torch_active_hint">FLASHLIGHT ACTIVE • TAP TO TURN OFF</string>
-    <string name="torch_standby_hint">STANDBY • TAP TO TURN ON</string>
-
-    <!-- Monitoring dashboard -->
-    <string name="dashboard_sentinel_audit">SENTINEL AUDIT</string>
-    <string name="dashboard_live_stream">LIVE TELEMETRY STREAM</string>
-    <string name="dashboard_role">ROLE: %1$s</string>
-    <string name="dashboard_hardware_telemetry">HARDWARE &amp; MESH TELEMETRY</string>
-    <string name="dashboard_last_checkin">LAST VERIFIED SAFETY CHECK-IN</string>
-    <string name="dashboard_audit_trail">IMMUTABLE AUDIT TRAIL</string>
-    <string name="dashboard_empty_events">No recorded safety events in local storage. All systems nominal.</string>
-    <string name="dashboard_safe">SAFE</string>
-    <string name="dashboard_pending">PENDING</string>
-    <string name="dashboard_alert">ALERT</string>
-    <string name="dashboard_cellular">Cellular / Offline</string>
-    <string name="battery_percent">%1$d%%</string>
-    <string name="battery_unplugged">Unplugged</string>
-    <string name="dashboard_local_log">Stored in the on-device event log</string>
-    <string name="dashboard_pending_sync">EVENTS WAITING TO SEND</string>
-    <string name="dashboard_pending_sync_detail">Stored safely on this device and sent when a connection returns</string>
-    <string name="dashboard_protected_person">Protected Person</string>
+    <!-- Monitoring dashboard (section 27) -->
+    <string name="dashboard_sentinel_audit">Recent activity</string>
+    <string name="dashboard_live_stream">On this device</string>
+    <string name="dashboard_hardware_telemetry">Device</string>
+    <string name="dashboard_last_checkin">Last safety check</string>
+    <string name="dashboard_audit_trail">History</string>
+    <string name="dashboard_empty_events">Nothing recorded on this device yet.</string>
+    <string name="dashboard_online">Online</string>
+    <string name="dashboard_offline">Offline</string>
+    <string name="dashboard_cellular">No internet</string>
+    <string name="dashboard_battery_unplugged">Not charging</string>
+    <string name="dashboard_local_log">Kept on this device</string>
+    <string name="dashboard_pending_sync">Waiting to send</string>
+    <string name="dashboard_pending_sync_detail">Stored here and sent when the connection returns</string>
+    <string name="dashboard_protected_person">Protected person</string>
     <string name="dashboard_default_role">Resident</string>
-    <string name="telemetry_array">SENTINEL TELEMETRY ARRAY</string>
+    <string name="dashboard_not_set_up">Set up the device to record activity.</string>
 
-    <!-- Information screens -->
-    <string name="info_dossier_title">SAFETY DOSSIER</string>
-    <string name="info_offline_vault">OFFLINE VAULT • PERSISTED</string>
-    <string name="info_fire_protocol">FIRE EVACUATION PROTOCOL</string>
-    <string name="info_home_dispatch">HOME DISPATCH &amp; ACCESS</string>
-    <string name="info_medical_profile">MEDICAL &amp; BIOMETRIC PROFILE</string>
-    <string name="info_no_medical">No medical profile recorded. Configure in Settings if relevant for first responders.</string>
-    <string name="info_fire_evacuation">FIRE EVACUATION</string>
-    <string name="info_critical_playbook">CRITICAL SAFETY PLAYBOOK</string>
-    <string name="info_local_dispatch">LOCAL EMERGENCY DISPATCH</string>
-    <string name="info_evacuation_steps">EVACUATION STEPS</string>
+    <!-- Setup: protected person (section 9) -->
+    <string name="setup_initialization">Set up HomeGuard</string>
+    <string name="setup_sentinel_config">Settings</string>
+    <string name="setup_architecture">Enter your details once. You can change them later.</string>
+    <string name="setup_security_prefs">Safety and device settings</string>
+    <string name="setup_operational_role">What is this device for?</string>
+    <string name="setup_mode_protected_title">At home</string>
+    <string name="setup_mode_protected_sub">The phone stays at home</string>
+    <string name="setup_mode_monitoring_title">Monitoring</string>
+    <string name="setup_mode_monitoring_sub">Watch another device</string>
+    <string name="setup_resident_profile">Who lives here</string>
+    <string name="setup_person_name_label">Name</string>
+    <string name="setup_person_name_hint">Optional</string>
+    <string name="setup_role_label">Relationship or role</string>
+    <string name="setup_role_hint">For example: Parent, Resident</string>
 
-    <!-- Setup -->
-    <string name="setup_initialization">INITIALIZATION</string>
-    <string name="setup_architecture">AEGIS ARCHITECTURE SETUP</string>
-    <string name="setup_sentinel_config">SENTINEL CONFIG</string>
-    <string name="setup_security_prefs">SECURITY &amp; HARDWARE PREFERENCES</string>
-    <string name="setup_operational_role">OPERATIONAL ROLE</string>
-    <string name="setup_mode_protected_title">PROTECTED</string>
-    <string name="setup_mode_protected_sub">At-home companion</string>
-    <string name="setup_mode_monitoring_title">MONITORING</string>
-    <string name="setup_mode_monitoring_sub">Caregiver device</string>
-    <string name="setup_resident_profile">RESIDENT &amp; SENTINEL PROFILE</string>
-    <string name="setup_person_name_label">Protected Person Name</string>
-    <string name="setup_person_name_hint">Their name</string>
-    <string name="setup_role_label">Role / Home Status</string>
-    <string name="setup_role_hint">e.g. Primary Resident, Solo</string>
-    <string name="setup_dispatch_links">COMMUNICATION DISPATCH LINKS</string>
-    <string name="setup_primary_contact_label">Primary Contact Name</string>
-    <string name="setup_primary_contact_hint">Their name</string>
-    <string name="setup_primary_phone_label">Phone Number or Web Link</string>
-    <string name="setup_primary_phone_hint">Phone number or https:// address</string>
-    <string name="setup_secondary_contact_label">Secondary Contact (Optional)</string>
-    <string name="setup_secondary_contact_hint">Their name</string>
-    <string name="setup_secondary_phone_label">Secondary Phone or Web Link</string>
-    <string name="setup_secondary_phone_hint">Phone number or https:// address</string>
-    <string name="setup_emergency_contact_label">Emergency Contact (Optional)</string>
-    <string name="setup_emergency_contact_hint">Their name</string>
-    <string name="setup_emergency_contact_phone_label">Emergency Contact Phone</string>
-    <string name="setup_emergency_number_label">Local Emergency Number</string>
-    <string name="setup_emergency_number_hint">Your local emergency number</string>
-    <string name="setup_location_access">LOCATION &amp; PHYSICAL ACCESS</string>
-    <string name="setup_address_label">Physical Address</string>
-    <string name="setup_address_hint">Street address, apartment or unit</string>
-    <string name="setup_security_contact_label">Building Security Contact</string>
-    <string name="setup_security_contact_hint">Security desk or building manager</string>
-    <string name="setup_access_label">Access Instructions</string>
-    <string name="setup_access_hint">Gate pin, keybox code, instructions</string>
-    <string name="setup_medical_header">MEDICAL DETAILS (OPTIONAL)</string>
-    <string name="setup_blood_group_label">Blood Group</string>
-    <string name="setup_blood_group_hint">e.g. O+, A-</string>
-    <string name="setup_allergies_label">Known Allergies</string>
-    <string name="setup_allergies_hint">e.g. Penicillin</string>
-    <string name="setup_medications_label">Critical Medications</string>
-    <string name="setup_medications_hint">Daily medications or prescriptions</string>
-    <string name="setup_doctor_label">Primary Physician Contact</string>
-    <string name="setup_doctor_hint">Clinic or doctor name and number</string>
-    <string name="setup_acoustic_header">ACOUSTIC SMOKE DETECTION</string>
-    <string name="setup_initialize">INITIALIZE SENTINEL CORE</string>
-    <string name="setup_commit">COMMIT CONFIGURATION</string>
+    <!-- Setup: contacts (section 9) -->
+    <string name="setup_dispatch_links">Who to contact</string>
+    <string name="setup_primary_contact_label">Primary contact name</string>
+    <string name="setup_primary_contact_hint">Optional</string>
+    <string name="setup_primary_phone_label">Phone number or web link</string>
+    <string name="setup_primary_phone_hint">Works without a SIM card</string>
+    <string name="setup_secondary_contact_label">Secondary contact name</string>
+    <string name="setup_secondary_contact_hint">Optional</string>
+    <string name="setup_secondary_phone_label">Secondary phone or web link</string>
+    <string name="setup_secondary_phone_hint">Phone number or https:// link</string>
+    <string name="setup_emergency_contact_label">Emergency contact name</string>
+    <string name="setup_emergency_contact_hint">Optional</string>
+    <string name="setup_emergency_contact_phone_label">Emergency contact number</string>
+    <string name="setup_emergency_number_label">Local emergency number</string>
+    <string name="setup_emergency_number_hint">Your area\'s emergency number</string>
 
-    <!-- Acoustic detection -->
-    <string name="acoustic_toggle_title">Listen for smoke alarms</string>
-    <string name="acoustic_toggle_desc">Uses the microphone to detect the tone of a smoke alarm. Off by default; no audio is recorded or stored.</string>
-    <string name="acoustic_active_notice">Active — HomeGuard is listening for a smoke alarm tone.</string>
+    <!-- Setup: home information (section 21) -->
+    <string name="setup_location_access">Home</string>
+    <string name="setup_address_label">Address</string>
+    <string name="setup_address_hint">Optional</string>
+    <string name="setup_security_contact_label">Building security</string>
+    <string name="setup_security_contact_hint">Optional</string>
+    <string name="setup_access_label">Access instructions</string>
+    <string name="setup_access_hint">For example: gate code, key safe</string>
 
-    <!-- Safety Disclaimer -->
-    <string name="disclaimer_title">Safety Notice</string>
-    <string name="disclaimer_text">HomeGuard is an auxiliary safety companion and is not a guaranteed emergency response service. Maintain direct real-world emergency contacts.</string>
+    <!-- Setup: medical (section 21, always optional) -->
+    <string name="setup_medical_header">Medical details (optional)</string>
+    <string name="setup_medical_caveat">Only fill this in if it would help a first responder. Leave it blank if you prefer.</string>
+    <string name="setup_blood_group_label">Blood group</string>
+    <string name="setup_blood_group_hint">Optional</string>
+    <string name="setup_allergies_label">Allergies</string>
+    <string name="setup_allergies_hint">Optional</string>
+    <string name="setup_medications_label">Medications</string>
+    <string name="setup_medications_hint">Optional</string>
+    <string name="setup_doctor_label">Doctor or clinic</string>
+    <string name="setup_doctor_hint">Optional</string>
+
+    <!-- Setup: safety check schedule (section 14) -->
+    <string name="setup_checkin_header">Scheduled safety checks</string>
+    <string name="setup_checkin_desc">HomeGuard will ask you to confirm you are okay at the times you choose.</string>
+    <string name="setup_checkin_enabled">Ask me on a schedule</string>
+    <string name="setup_checkin_times">Times</string>
+    <string name="setup_checkin_add_time">Add a time</string>
+    <string name="setup_checkin_remove_time">Remove</string>
+    <string name="setup_checkin_timeout_label">Minutes to respond</string>
+    <string name="setup_checkin_no_times">No times set. Add at least one.</string>
+
+    <!-- Setup: night mode (section 16) -->
+    <string name="setup_night_header">Night mode</string>
+    <string name="setup_night_desc">Dim the screen automatically during the hours you choose.</string>
+    <string name="setup_night_enabled">Use a time window</string>
+    <string name="setup_night_start">Start time</string>
+    <string name="setup_night_end">End time</string>
+
+    <!-- Setup: battery thresholds (section 17) -->
+    <string name="setup_battery_header">Battery warnings</string>
+    <string name="setup_battery_low_label">Warn me at (%)</string>
+    <string name="setup_battery_critical_label">Critical at (%)</string>
+    <string name="setup_battery_invalid">The critical level must be lower than the warning level.</string>
+
+    <string name="setup_initialize">Finish setup</string>
+    <string name="setup_commit">Save settings</string>
+
+    <!-- Safety notice (section 52) -->
+    <string name="disclaimer_title">Before you start</string>
+    <string name="disclaimer_text">HomeGuard is an extra safety layer. It is not a replacement for emergency services.\n\nInternet may be unavailable. The phone may lose power. Android may limit background activity, so alerts can be delayed.\n\nPlease keep real emergency contacts you can reach by other means.</string>
+    <string name="disclaimer_acknowledge">I understand</string>
 </resources>

@@ -11,12 +11,16 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.homeguard.core.model.AppConfig
+import org.homeguard.core.model.BatteryThresholds
+import org.homeguard.core.model.CheckInSchedule
 import org.homeguard.core.model.ContactInfo
 import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.HomeInfo
 import org.homeguard.core.model.MedicalInfo
+import org.homeguard.core.model.NightModeSchedule
 import org.homeguard.core.model.SafetyStatus
 import java.util.UUID
 
@@ -42,6 +46,7 @@ class PreferencesManager(private val context: Context) {
 
         val KEY_EMERGENCY_CONTACT_NAME = stringPreferencesKey("emergency_contact_name")
         val KEY_EMERGENCY_CONTACT_PHONE = stringPreferencesKey("emergency_contact_phone")
+
         val KEY_LOCAL_EMERGENCY_NUMBER = stringPreferencesKey("local_emergency_number")
 
         val KEY_HOME_ADDRESS = stringPreferencesKey("home_address")
@@ -55,16 +60,36 @@ class PreferencesManager(private val context: Context) {
         val KEY_MEDICAL_NOTES = stringPreferencesKey("medical_notes")
 
         val KEY_NIGHT_MODE = booleanPreferencesKey("night_mode_enabled")
-        val KEY_ACOUSTIC_DETECTION = booleanPreferencesKey("acoustic_detection_enabled")
         val KEY_CHECKIN_INTERVAL_HOURS = intPreferencesKey("checkin_interval_hours")
         val KEY_CHECKIN_GRACE_MINUTES = intPreferencesKey("checkin_grace_minutes")
         val KEY_LAST_CHECKIN = longPreferencesKey("last_checkin_timestamp")
         val KEY_SAFETY_STATUS = stringPreferencesKey("current_safety_status")
+
+        // Scheduled check-ins (section 14)
+        val KEY_CHECKIN_SCHED_ENABLED = booleanPreferencesKey("checkin_schedule_enabled")
+        val KEY_CHECKIN_SCHEDULE_TIMES = stringPreferencesKey("checkin_schedule_times")
+        val KEY_CHECKIN_TIMEOUT_MINUTES = intPreferencesKey("checkin_timeout_minutes")
+
+        // Night mode window (section 16)
+        val KEY_NIGHT_START_MINUTE = intPreferencesKey("night_start_minute")
+        val KEY_NIGHT_END_MINUTE = intPreferencesKey("night_end_minute")
+
+        // Battery thresholds (section 17)
+        val KEY_BATTERY_LOW_PERCENT = intPreferencesKey("battery_low_percent")
+        val KEY_BATTERY_CRITICAL_PERCENT = intPreferencesKey("battery_critical_percent")
+
+        // Safety notice acknowledgement (section 52)
+        val KEY_ACK_SAFETY_NOTICE = booleanPreferencesKey("acknowledged_safety_notice")
+
+        /** Separator for the persisted check-in time list. */
+        private const val TIME_SEPARATOR = ","
     }
 
     /**
-     * Stable device identity. Previously this fell back to a fresh UUID on every emission, so any
-     * event recorded before setup completed carried an ID that no longer existed.
+     * Stable device identity.
+     *
+     * Previously this fell back to a fresh UUID on every emission, so any event recorded before
+     * setup completed carried an id that no longer existed.
      */
     val deviceIdFlow: Flow<String> = dataStore.data
         .map { prefs -> prefs[KEY_DEVICE_ID] ?: UUID.randomUUID().toString() }
@@ -75,7 +100,8 @@ class PreferencesManager(private val context: Context) {
         var resolved = ""
         dataStore.edit { prefs ->
             val existing = prefs[KEY_DEVICE_ID]
-            resolved = existing ?: UUID.randomUUID().toString().also { prefs[KEY_DEVICE_ID] = it }
+            resolved = existing
+                ?: UUID.randomUUID().toString().also { prefs[KEY_DEVICE_ID] = it }
         }
         return resolved
     }
@@ -117,11 +143,36 @@ class PreferencesManager(private val context: Context) {
                 notes = prefs[KEY_MEDICAL_NOTES] ?: ""
             ),
             isNightModeEnabled = prefs[KEY_NIGHT_MODE] ?: false,
-            isAcousticDetectionEnabled = prefs[KEY_ACOUSTIC_DETECTION] ?: false,
             checkInIntervalHours = prefs[KEY_CHECKIN_INTERVAL_HOURS] ?: 24,
-            checkInGracePeriodMinutes = prefs[KEY_CHECKIN_GRACE_MINUTES] ?: 60
+            checkInGracePeriodMinutes = prefs[KEY_CHECKIN_GRACE_MINUTES] ?: 60,
+            checkInSchedule = CheckInSchedule(
+                enabled = prefs[KEY_CHECKIN_SCHED_ENABLED] ?: true,
+                dailyTimes = decodeTimes(prefs[KEY_CHECKIN_SCHEDULE_TIMES]),
+                timeoutMinutes = prefs[KEY_CHECKIN_TIMEOUT_MINUTES] ?: 60
+            ),
+            nightModeSchedule = NightModeSchedule(
+                enabled = prefs[KEY_NIGHT_MODE] ?: false,
+                startMinute = prefs[KEY_NIGHT_START_MINUTE] ?: (22 * 60),
+                endMinute = prefs[KEY_NIGHT_END_MINUTE] ?: (7 * 60)
+            ),
+            batteryThresholds = BatteryThresholds(
+                lowPercent = prefs[KEY_BATTERY_LOW_PERCENT] ?: 20,
+                criticalPercent = prefs[KEY_BATTERY_CRITICAL_PERCENT] ?: 10
+            ),
+            hasAcknowledgedSafetyNotice = prefs[KEY_ACK_SAFETY_NOTICE] ?: false
         )
     }
+
+    private fun decodeTimes(raw: String?): List<Int> {
+        if (raw.isNullOrBlank()) return CheckInSchedule().dailyTimes
+        return raw.split(TIME_SEPARATOR)
+            .mapNotNull { it.trim().toIntOrNull() }
+            .filter { it in 0..1439 }
+            .ifEmpty { CheckInSchedule().dailyTimes }
+    }
+
+    private fun encodeTimes(times: List<Int>): String =
+        times.filter { it in 0..1439 }.joinToString(TIME_SEPARATOR)
 
     val lastCheckInTimestampFlow: Flow<Long?> = dataStore.data.map { prefs ->
         prefs[KEY_LAST_CHECKIN]
@@ -134,6 +185,8 @@ class PreferencesManager(private val context: Context) {
             SafetyStatus.UNKNOWN
         }
     }
+
+    suspend fun currentConfig(): AppConfig = appConfigFlow.first()
 
     suspend fun saveConfig(config: AppConfig) {
         dataStore.edit { prefs ->
@@ -160,16 +213,17 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_MEDICATIONS] = config.medicalInfo.medications
             prefs[KEY_DOCTOR] = config.medicalInfo.doctorContact
             prefs[KEY_MEDICAL_NOTES] = config.medicalInfo.notes
-            prefs[KEY_NIGHT_MODE] = config.isNightModeEnabled
-            prefs[KEY_ACOUSTIC_DETECTION] = config.isAcousticDetectionEnabled
+            prefs[KEY_NIGHT_MODE] = config.nightModeSchedule.enabled
             prefs[KEY_CHECKIN_INTERVAL_HOURS] = config.checkInIntervalHours
             prefs[KEY_CHECKIN_GRACE_MINUTES] = config.checkInGracePeriodMinutes
-        }
-    }
-
-    suspend fun setAcousticDetectionEnabled(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[KEY_ACOUSTIC_DETECTION] = enabled
+            prefs[KEY_CHECKIN_SCHED_ENABLED] = config.checkInSchedule.enabled
+            prefs[KEY_CHECKIN_SCHEDULE_TIMES] = encodeTimes(config.checkInSchedule.dailyTimes)
+            prefs[KEY_CHECKIN_TIMEOUT_MINUTES] = config.checkInSchedule.timeoutMinutes
+            prefs[KEY_NIGHT_START_MINUTE] = config.nightModeSchedule.startMinute
+            prefs[KEY_NIGHT_END_MINUTE] = config.nightModeSchedule.endMinute
+            prefs[KEY_BATTERY_LOW_PERCENT] = config.batteryThresholds.lowPercent
+            prefs[KEY_BATTERY_CRITICAL_PERCENT] = config.batteryThresholds.criticalPercent
+            prefs[KEY_ACK_SAFETY_NOTICE] = config.hasAcknowledgedSafetyNotice
         }
     }
 
@@ -189,6 +243,12 @@ class PreferencesManager(private val context: Context) {
     suspend fun setSafetyStatus(status: SafetyStatus) {
         dataStore.edit { prefs ->
             prefs[KEY_SAFETY_STATUS] = status.name
+        }
+    }
+
+    suspend fun acknowledgeSafetyNotice() {
+        dataStore.edit { prefs ->
+            prefs[KEY_ACK_SAFETY_NOTICE] = true
         }
     }
 }

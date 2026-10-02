@@ -10,19 +10,27 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import org.homeguard.HomeGuardApplication
+import org.homeguard.R
+import org.homeguard.core.checkin.CheckInScheduler
+import org.homeguard.core.checkin.CheckInTimeoutEvaluator
+import org.homeguard.core.communication.CommunicationManager
+import org.homeguard.core.communication.CommunicationResult
 import org.homeguard.core.data.EventRepository
 import org.homeguard.core.data.SafetyRepository
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.SafetyStatus
 import org.homeguard.core.notifications.SafetyNotifier
-import org.homeguard.core.sensors.AcousticAlarmDetector
 import org.homeguard.core.sensors.FallAndMotionDetector
 import org.homeguard.core.sync.SyncWorker
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -41,7 +49,7 @@ sealed class NavigationDestination {
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val app = application as org.homeguard.HomeGuardApplication
+    private val app = application as HomeGuardApplication
     private val container = app.container
     private val preferencesManager = container.preferencesManager
     private val eventRepository: EventRepository = container.eventRepository
@@ -54,24 +62,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val communicationManager = container.communicationManager
     private val caregiverBeaconManager = container.caregiverBeaconManager
     private val notifier = SafetyNotifier(application)
+    private val checkInScheduler = CheckInScheduler(application)
 
     private val _fallDetectedAlert = MutableStateFlow(false)
     val fallDetectedAlert: StateFlow<Boolean> = _fallDetectedAlert.asStateFlow()
-
-    private val _smokeAlarmDetectedAlert = MutableStateFlow(false)
-    val smokeAlarmDetectedAlert: StateFlow<Boolean> = _smokeAlarmDetectedAlert.asStateFlow()
-
-    private val _isAcousticEnabled = MutableStateFlow(false)
-    val isAcousticEnabled: StateFlow<Boolean> = _isAcousticEnabled.asStateFlow()
-
-    private val acousticAlarmDetector = AcousticAlarmDetector(
-        context = application,
-        onAlarmSoundDetected = {
-            _smokeAlarmDetectedAlert.value = true
-        }
-    )
-
-    val isAcousticListening: StateFlow<Boolean> = acousticAlarmDetector.isListening
 
     private val fallAndMotionDetector = FallAndMotionDetector(
         context = application,
@@ -79,7 +73,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             _fallDetectedAlert.value = true
         },
         onSignificantMovement = {
-            // Implicit passive check-in when user moves/handles phone at home
+            // Passive confirmation: handling the phone at home is evidence the resident is up.
             viewModelScope.launch {
                 val deviceId = preferencesManager.ensureDeviceId()
                 safetyRepository.recordCheckIn(deviceId)
@@ -100,22 +94,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val lastCheckInFormatted: StateFlow<String> = safetyRepository.lastCheckInTimestampFlow.map { ts ->
         if (ts != null && ts > 0) {
-            val sdf = SimpleDateFormat("h:mm a, MMM d", Locale.getDefault())
-            sdf.format(Date(ts))
+            SimpleDateFormat("h:mm a, MMM d", Locale.getDefault()).format(Date(ts))
         } else {
-            getApplication<Application>().getString(org.homeguard.R.string.last_checkin_none)
+            getApplication<Application>().getString(R.string.last_checkin_none)
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     val lastMotionAgoFormatted: StateFlow<String> = fallAndMotionDetector.telemetry.map { telemetry ->
         val elapsedMinutes = (System.currentTimeMillis() - telemetry.lastMovementTimestamp) / 60_000L
         when {
-            elapsedMinutes <= 0 -> getApplication<Application>()
-                .getString(org.homeguard.R.string.last_motion_just_now)
-            elapsedMinutes < 60 -> getApplication<Application>()
-                .getString(org.homeguard.R.string.last_motion_minutes, elapsedMinutes)
-            else -> getApplication<Application>()
-                .getString(org.homeguard.R.string.last_motion_hours, elapsedMinutes / 60)
+            elapsedMinutes <= 0 -> getString(R.string.last_motion_just_now)
+            elapsedMinutes < 60 -> getString(R.string.last_motion_minutes, elapsedMinutes)
+            else -> getString(R.string.last_motion_hours, elapsedMinutes / 60)
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
@@ -125,7 +115,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val pendingSyncCount = eventRepository.pendingCountFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
-    private val _currentDestination = MutableStateFlow<NavigationDestination>(NavigationDestination.Home)
+    private val _currentDestination =
+        MutableStateFlow<NavigationDestination>(NavigationDestination.Home)
     val currentDestination: StateFlow<NavigationDestination> = _currentDestination.asStateFlow()
 
     private val _countdownSeconds = MutableStateFlow(5)
@@ -133,6 +124,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _communicationError = MutableStateFlow<String?>(null)
     val communicationError: StateFlow<String?> = _communicationError.asStateFlow()
+
+    /**
+     * Whether the scheduled "Are you okay?" prompt should be showing.
+     *
+     * Driven by an intent extra when the user taps the notification, and otherwise false.
+     */
+    private val _checkInPromptVisible = MutableStateFlow(false)
+    val checkInPromptVisible: StateFlow<Boolean> = _checkInPromptVisible.asStateFlow()
+
+    /** Section 52: shown once, until the resident acknowledges it. */
+    private val _safetyNoticeVisible = MutableStateFlow(false)
+    val safetyNoticeVisible: StateFlow<Boolean> = _safetyNoticeVisible.asStateFlow()
 
     private var countdownJob: Job? = null
 
@@ -143,17 +146,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             preferencesManager.appConfigFlow.collect { config ->
-                if (!config.isSetupComplete && _currentDestination.value == NavigationDestination.Home) {
+                if (!config.isSetupComplete &&
+                    _currentDestination.value == NavigationDestination.Home
+                ) {
                     _currentDestination.value = NavigationDestination.Setup
+                }
+                if (!config.hasAcknowledgedSafetyNotice && config.isSetupComplete) {
+                    _safetyNoticeVisible.value = true
                 }
             }
         }
 
         viewModelScope.launch {
-            // P0-4: identity must exist before any event is recorded.
+            // Identity must exist before any event is recorded.
             val deviceId = preferencesManager.ensureDeviceId()
-            // P0-5: the remote schema has NOT NULL foreign keys into `devices`, so registration
-            // must happen before the first event or every insert fails on the constraint.
+            // The remote schema has NOT NULL foreign keys into `devices`, so registration must
+            // happen before the first event or every insert fails on the constraint.
             val config = appConfig.value
             container.remoteSyncDataSource.registerDevice(
                 deviceId = deviceId,
@@ -170,29 +178,89 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         SyncWorker.schedulePeriodicSync(application)
-
         fallAndMotionDetector.start()
-
-        // P0-6: the microphone is opt-in only. Never started automatically.
         observeBatteryForNotifications()
+        observeCheckInSchedule()
+        observeMissedCheckIn()
     }
+
+    /** Applies the configured schedule whenever the user changes it. */
+    private fun observeCheckInSchedule() {
+        viewModelScope.launch {
+            preferencesManager.appConfigFlow
+                .map { it.checkInSchedule }
+                .distinctUntilChanged()
+                .collect { checkInScheduler.applySchedule(it) }
+        }
+    }
+
+    /**
+     * Downgrades an unanswered scheduled check-in to UNKNOWN and notifies once.
+     *
+     * Deliberately never produces EMERGENCY: section 15 reserves that for an explicit SOS.
+     */
+    private fun observeMissedCheckIn() {
+        viewModelScope.launch {
+            combine(
+                appConfig,
+                safetyRepository.lastCheckInTimestampFlow
+            ) { config, lastCheckIn -> config to lastCheckIn }
+                .collect { (config, lastCheckIn) ->
+                    if (!config.isSetupComplete || !config.checkInSchedule.enabled) return@collect
+
+                    val now = System.currentTimeMillis()
+                    val promptAt = lastPromptAt
+                    val missed = CheckInTimeoutEvaluator.isMissed(
+                        schedule = config.checkInSchedule,
+                        lastCheckInAt = lastCheckIn,
+                        lastPromptAt = promptAt,
+                        now = now
+                    )
+                    if (missed && !missedNotified) {
+                        missedNotified = true
+                        // Record the miss so it reaches the monitoring contact.
+                        viewModelScope.launch {
+                            val deviceId = preferencesManager.ensureDeviceId()
+                            eventRepository.recordAudit(
+                                eventType = org.homeguard.core.model.EventType.CHECK_IN,
+                                summary = org.homeguard.core.database.entity.EventSummaries
+                                    .CHECK_IN_MISSED,
+                                details = "Scheduled check-in was not answered within the timeout."
+                            )
+                            SyncWorker.triggerImmediateSync(getApplication())
+                        }
+                        notifier.notifyCheckInMissed()
+                    }
+                    if (!missed) {
+                        missedNotified = false
+                    }
+                }
+        }
+    }
+
+    /** Timestamp of the most recent scheduled prompt raised on this device. */
+    private var lastPromptAt: Long? = null
+
+    /** Suppresses repeat notifications for the same missed check-in. */
+    private var missedNotified = false
 
     private fun observeBatteryForNotifications() {
         viewModelScope.launch {
             batteryMonitor.batteryInfo.collect { info ->
+                val thresholds = appConfig.value.batteryThresholds
                 if (info.isCharging) {
                     lowBatteryNotified = false
                     criticalBatteryNotified = false
                     notifier.clearBatteryAlerts()
                     return@collect
                 }
-                if (info.isCritical) {
+                if (info.level <= thresholds.criticalPercent) {
                     if (!criticalBatteryNotified) {
                         criticalBatteryNotified = true
                         lowBatteryNotified = true
                         notifier.notifyBatteryCritical(info.level)
                     }
-                } else if (info.isLow) {
+                } else if (info.level <= thresholds.lowPercent) {
                     if (!lowBatteryNotified) {
                         lowBatteryNotified = true
                         notifier.notifyBatteryLow(info.level)
@@ -202,23 +270,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Called only after the user explicitly enables acoustic detection and grants the mic. */
-    fun onAcousticPermissionGranted() {
-        _isAcousticEnabled.value = true
-        acousticAlarmDetector.startListening()
+    fun onCheckInNotificationOpened() {
+        lastPromptAt = System.currentTimeMillis()
+        _checkInPromptVisible.value = true
     }
 
-    fun onAcousticPermissionDenied() {
-        _isAcousticEnabled.value = false
-        acousticAlarmDetector.stopListening()
+    fun dismissCheckInPrompt() {
+        _checkInPromptVisible.value = false
     }
 
-    fun setAcousticEnabled(enabled: Boolean) {
-        if (enabled) {
-            onAcousticPermissionGranted()
-        } else {
-            onAcousticPermissionDenied()
-        }
+    fun dismissSafetyNotice() {
+        _safetyNoticeVisible.value = false
+        viewModelScope.launch { preferencesManager.acknowledgeSafetyNotice() }
     }
 
     fun navigateTo(dest: NavigationDestination) {
@@ -231,22 +294,23 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             safetyRepository.recordCheckIn(deviceId)
             caregiverBeaconManager.playRadarChirp()
             notifier.notifyCheckInRecorded()
+            missedNotified = false
+            _checkInPromptVisible.value = false
             SyncWorker.triggerImmediateSync(getApplication())
         }
     }
 
+    fun requestHelpFromPrompt() {
+        _checkInPromptVisible.value = false
+        startEmergencyCountdown()
+    }
+
     fun pingCaregiverBeacon() {
-        viewModelScope.launch {
-            caregiverBeaconManager.playRadarChirp()
-        }
+        viewModelScope.launch { caregiverBeaconManager.playRadarChirp() }
     }
 
     fun dismissFallAlert() {
         _fallDetectedAlert.value = false
-    }
-
-    fun dismissSmokeAlert() {
-        _smokeAlarmDetectedAlert.value = false
     }
 
     fun startEmergencyCountdown() {
@@ -285,7 +349,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun stopAlarmAndResolve() {
         alarmManager.stopAlarm()
         viewModelScope.launch {
-            // P1-3: resolving records a deliberate check-in so SAFE is earned, not assumed.
+            // Resolving records a deliberate check-in so SAFE is earned, not assumed.
             val deviceId = preferencesManager.ensureDeviceId()
             safetyRepository.resolveEmergency(deviceId)
             _currentDestination.value = NavigationDestination.Home
@@ -300,22 +364,28 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         torchManager.setTorch(false)
     }
 
+    /** True when the current wall-clock time falls inside the configured night window. */
+    fun isNightWindowActive(): Boolean {
+        val calendar = Calendar.getInstance()
+        val nowMinute =
+            calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
+        return appConfig.value.nightModeSchedule.isActiveAt(nowMinute)
+    }
+
     fun toggleNightMode() {
-        val current = appConfig.value.isNightModeEnabled
+        val current = appConfig.value.nightModeSchedule.enabled
         viewModelScope.launch {
             preferencesManager.setNightMode(!current)
-            if (!current) {
-                _currentDestination.value = NavigationDestination.NightMode
-            } else {
-                _currentDestination.value = NavigationDestination.Home
-            }
+            _currentDestination.value =
+                if (!current) NavigationDestination.NightMode
+                else NavigationDestination.Home
         }
     }
 
     fun initiateCallToPrimary(context: Context) {
         val contact = appConfig.value.primaryContact
         val result = communicationManager.initiateCall(context, contact)
-        if (result is org.homeguard.core.communication.CommunicationResult.Unavailable) {
+        if (result is CommunicationResult.Unavailable) {
             _communicationError.value = result.message
         }
     }
@@ -328,6 +398,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val deviceId = preferencesManager.ensureDeviceId()
             preferencesManager.saveConfig(config.copy(deviceId = deviceId))
+            // Re-arm immediately so a schedule change takes effect without waiting for a restart.
+            checkInScheduler.applySchedule(config.checkInSchedule)
             // Keep the remote device row in step with local profile changes.
             container.remoteSyncDataSource.registerDevice(
                 deviceId = deviceId,
@@ -341,10 +413,14 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         fallAndMotionDetector.stop()
-        acousticAlarmDetector.stopListening()
         batteryMonitor.unregister()
         connectivityMonitor.unregister()
         torchManager.cleanUp()
         alarmManager.stopAlarm()
     }
+
+    private fun getString(resId: Int): String = getApplication<Application>().getString(resId)
+
+    private fun getString(resId: Int, vararg args: Any): String =
+        getApplication<Application>().getString(resId, *args)
 }
