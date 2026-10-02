@@ -10,11 +10,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.homeguard.core.model.DeviceMode
+import org.homeguard.ui.screens.CaregiverDashboardScreen
 import org.homeguard.ui.screens.EmergencyActiveScreen
 import org.homeguard.ui.screens.EmergencyCountdownScreen
 import org.homeguard.ui.screens.EmergencyInfoScreen
 import org.homeguard.ui.screens.FireGuideScreen
 import org.homeguard.ui.screens.MonitoringDashboardScreen
+import org.homeguard.ui.screens.MonitorJoinScreen
 import org.homeguard.ui.screens.NightModeScreen
 import org.homeguard.ui.screens.PowerCutScreen
 import org.homeguard.ui.screens.ProtectedHomeScreen
@@ -41,6 +44,20 @@ fun HomeGuardApp(
     val checkInPromptVisible by viewModel.checkInPromptVisible.collectAsState()
     val safetyNoticeVisible by viewModel.safetyNoticeVisible.collectAsState()
     val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+    val syncHealth by viewModel.syncHealth.collectAsState()
+
+    // Monitoring state (section 6B)
+    val householdInviteCode by viewModel.householdInviteCode.collectAsState()
+    val monitoredDevice by viewModel.monitoredDevice.collectAsState()
+    val householdMembers by viewModel.householdMembers.collectAsState()
+    val remoteEmergencies by viewModel.remoteEmergencies.collectAsState()
+    val remoteCheckIns by viewModel.remoteCheckIns.collectAsState()
+    val isRefreshingMonitoring by viewModel.isRefreshingMonitoring.collectAsState()
+    val caregiverLoadState by viewModel.caregiverLoadState.collectAsState()
+    val lastMonitoringRefresh by viewModel.lastMonitoringRefresh.collectAsState()
+    val householdError by viewModel.householdError.collectAsState()
+
+    val isMonitoringDevice = appConfig.deviceMode == DeviceMode.MONITORING_DEVICE
 
     // Torch needs a runtime CAMERA grant; ask only when the user actually toggles it.
     val onFlashlightClick = {
@@ -65,6 +82,40 @@ fun HomeGuardApp(
         }
     }
 
+    // A monitoring device never shows the protected-device home. It has no SOS, no check-in and no
+    // flashlight to offer, so presenting that screen would be misleading in both directions.
+    if (isMonitoringDevice) {
+        if (householdInviteCode == null && currentDestination == NavigationDestination.Home) {
+            MonitorJoinScreen(
+                isJoining = isRefreshingMonitoring,
+                errorMessage = householdError,
+                onJoin = viewModel::joinHousehold,
+                onDismissError = viewModel::dismissHouseholdError,
+                onSwitchToProtected = {
+                    viewModel.saveConfig(appConfig.copy(deviceMode = DeviceMode.PROTECTED_DEVICE))
+                }
+            )
+        } else {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
+                CaregiverDashboardScreen(
+                    householdName = householdInviteCode.orEmpty(),
+                    device = monitoredDevice,
+                    members = householdMembers,
+                    emergencyEvents = remoteEmergencies,
+                    checkIns = remoteCheckIns,
+                    isRefreshing = isRefreshingMonitoring,
+                    loadState = caregiverLoadState,
+                    lastRefreshedAt = lastMonitoringRefresh,
+                    onRefresh = viewModel::refreshMonitoring
+                )
+            }
+        }
+        return
+    }
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background
@@ -78,6 +129,8 @@ fun HomeGuardApp(
                     appConfig = appConfig,
                     lastCheckInFormatted = lastCheckInFormatted,
                     lastMotionAgoFormatted = lastMotionAgoFormatted,
+                    syncHealth = syncHealth,
+                    pendingSyncCount = pendingSyncCount,
                     communicationError = communicationError,
                     fallDetectedAlert = fallDetectedAlert,
                     checkInPromptVisible = checkInPromptVisible,

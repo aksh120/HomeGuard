@@ -30,6 +30,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -68,6 +69,8 @@ fun ProtectedHomeScreen(
     appConfig: AppConfig,
     lastCheckInFormatted: String,
     lastMotionAgoFormatted: String,
+    syncHealth: org.homeguard.core.model.SyncHealth,
+    pendingSyncCount: Int,
     communicationError: String?,
     fallDetectedAlert: Boolean,
     checkInPromptVisible: Boolean,
@@ -110,13 +113,17 @@ fun ProtectedHomeScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // 3. Is the device itself working?
+        // 3. Is the device itself working? Includes whether alerts can actually leave the phone.
         TelemetryCockpitHUD(
             batteryLevel = batteryInfo.level,
             isCharging = batteryInfo.isCharging,
             wifiConnected = connectivityInfo.isInternetAvailable,
             lastMotionAgoFormatted = lastMotionAgoFormatted
         )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        SyncStatusCard(syncHealth = syncHealth, pendingSyncCount = pendingSyncCount)
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -366,6 +373,82 @@ fun ProtectedHomeScreen(
                 }
             }
         )
+    }
+}
+
+/**
+ * Whether alerts can actually leave this phone.
+ *
+ * A safety app that cannot say "my alert is stuck" is worse than one that has no backend at all,
+ * because the resident reasonably assumes the emergency was delivered. Local-only operation is a
+ * legitimate state, so it is stated plainly rather than shown as a failure.
+ */
+@Composable
+private fun SyncStatusCard(
+    syncHealth: org.homeguard.core.model.SyncHealth,
+    pendingSyncCount: Int
+) {
+    val (label, color) = when (syncHealth.status) {
+        org.homeguard.core.model.SyncStatus.HEALTHY ->
+            stringResource(R.string.sync_ok) to org.homeguard.core.designsystem.theme.StatusSafe
+        org.homeguard.core.model.SyncStatus.PENDING ->
+            stringResource(R.string.sync_pending) to MaterialTheme.colorScheme.onSurfaceVariant
+        org.homeguard.core.model.SyncStatus.NOT_CONFIGURED ->
+            stringResource(R.string.sync_local_only) to MaterialTheme.colorScheme.onSurfaceVariant
+        org.homeguard.core.model.SyncStatus.NOT_AUTHENTICATED ->
+            stringResource(R.string.sync_not_signed_in) to org.homeguard.core.designsystem.theme.StatusUnknown
+        org.homeguard.core.model.SyncStatus.ERROR ->
+            stringResource(R.string.sync_error) to org.homeguard.core.designsystem.theme.StatusEmergency
+    }
+
+    val detail = when (syncHealth.status) {
+        org.homeguard.core.model.SyncStatus.NOT_CONFIGURED ->
+            stringResource(R.string.sync_local_only_detail)
+        org.homeguard.core.model.SyncStatus.NOT_AUTHENTICATED ->
+            stringResource(R.string.sync_not_signed_in_detail)
+        org.homeguard.core.model.SyncStatus.ERROR ->
+            stringResource(R.string.sync_error_detail)
+        org.homeguard.core.model.SyncStatus.PENDING ->
+            stringResource(R.string.sync_pending_detail)
+        org.homeguard.core.model.SyncStatus.HEALTHY ->
+            stringResource(R.string.sync_ok_detail)
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, color.copy(alpha = 0.5f))
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = color
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = detail,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 19.sp
+                )
+            }
+            if (pendingSyncCount > 0) {
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = pendingSyncCount.toString(),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+            }
+        }
     }
 }
 

@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -22,13 +23,20 @@ import org.homeguard.core.checkin.CheckInTimeoutEvaluator
 import org.homeguard.core.communication.CommunicationManager
 import org.homeguard.core.communication.CommunicationResult
 import org.homeguard.core.data.EventRepository
+import org.homeguard.core.data.MonitoringRemoteDataSource
 import org.homeguard.core.data.SafetyRepository
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.model.AppConfig
+import org.homeguard.core.model.HouseholdMember
+import org.homeguard.core.model.MonitoredDevice
+import org.homeguard.core.model.RemoteCheckIn
+import org.homeguard.core.model.RemoteEmergencyEvent
 import org.homeguard.core.model.SafetyStatus
+import org.homeguard.core.model.SyncHealth
 import org.homeguard.core.notifications.SafetyNotifier
 import org.homeguard.core.sensors.FallAndMotionDetector
 import org.homeguard.core.sync.SyncWorker
+import org.homeguard.ui.screens.CaregiverLoadState
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -115,6 +123,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val pendingSyncCount = eventRepository.pendingCountFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, 0)
 
+    /**
+     * Remote connection health, so the app can answer section 53's fourth question honestly.
+     *
+     * Without this a build that cannot reach Supabase looks identical to a working one, and
+     * alerts quietly queue forever.
+     */
+    val syncHealth: StateFlow<SyncHealth> = preferencesManager.syncHealthFlow
+        .stateIn(viewModelScope, SharingStarted.Eagerly, SyncHealth())
+
     private val _currentDestination =
         MutableStateFlow<NavigationDestination>(NavigationDestination.Home)
     val currentDestination: StateFlow<NavigationDestination> = _currentDestination.asStateFlow()
@@ -182,6 +199,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeBatteryForNotifications()
         observeCheckInSchedule()
         observeMissedCheckIn()
+
+        viewModelScope.launch {
+            val stored = preferencesManager.householdFlow.first()
+            _householdId.value = stored.first
+            _householdInviteCode.value = stored.second
+            if (!stored.first.isNullOrBlank()) {
+                refreshMonitoring()
+            }
+        }
     }
 
     /** Applies the configured schedule whenever the user changes it. */
@@ -422,6 +448,152 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
         }
+    }
+
+    // --- Household and monitoring (sections 6B, 27) ----------------------------------------
+
+    private val _householdId = MutableStateFlow<String?>(null)
+    private val _householdInviteCode = MutableStateFlow<String?>(null)
+    val householdInviteCode: StateFlow<String?> = _householdInviteCode.asStateFlow()
+
+    private val _monitoredDevice = MutableStateFlow<MonitoredDevice?>(null)
+    val monitoredDevice: StateFlow<MonitoredDevice?> = _monitoredDevice.asStateFlow()
+
+    private val _householdMembers = MutableStateFlow<List<HouseholdMember>>(emptyList())
+    val householdMembers: StateFlow<List<HouseholdMember>> = _householdMembers.asStateFlow()
+
+    private val _remoteEmergencies = MutableStateFlow<List<RemoteEmergencyEvent>>(emptyList())
+    val remoteEmergencies: StateFlow<List<RemoteEmergencyEvent>> = _remoteEmergencies.asStateFlow()
+
+    private val _remoteCheckIns = MutableStateFlow<List<RemoteCheckIn>>(emptyList())
+    val remoteCheckIns: StateFlow<List<RemoteCheckIn>> = _remoteCheckIns.asStateFlow()
+
+    private val _isRefreshingMonitoring = MutableStateFlow(false)
+    val isRefreshingMonitoring: StateFlow<Boolean> = _isRefreshingMonitoring.asStateFlow()
+
+    private val _caregiverLoadState = MutableStateFlow<CaregiverLoadState>(CaregiverLoadState.Idle)
+    val caregiverLoadState: StateFlow<CaregiverLoadState> = _caregiverLoadState.asStateFlow()
+
+    private val _lastMonitoringRefresh = MutableStateFlow<Long?>(null)
+    val lastMonitoringRefresh: StateFlow<Long?> = _lastMonitoringRefresh.asStateFlow()
+
+    private val _householdError = MutableStateFlow<String?>(null)
+    val householdError: StateFlow<String?> = _householdError.asStateFlow()
+
+    /**
+     * Creates a household and links this device into it, publishing the invite code.
+     *
+     * Idempotent: if a household already exists it is not recreated, so a user who taps twice
+     * does not end up orphaned from their own caregivers.
+     */
+    fun createHousehold(name: String) {
+        viewModelScope.launch {
+            _householdError.value = null
+            val existing = preferencesManager.householdFlow.first()
+            if (existing.first != null) {
+                _householdId.value = existing.first
+                _householdInviteCode.value = existing.second
+                return@launch
+            }
+            val remote = container.monitoringRemoteDataSource
+            remote.createHousehold(name)
+                .onSuccess { household ->
+                    val deviceId = preferencesManager.ensureDeviceId()
+                    remote.attachDeviceToHousehold(household.id, deviceId)
+                    remote.joinHousehold(household.id, deviceId, "PROTECTED")
+                    preferencesManager.setHousehold(household.id, household.inviteCode)
+                    _householdId.value = household.id
+                    _householdInviteCode.value = household.inviteCode
+                    // Publish the household id on future writes so caregivers can find the device.
+                    publishHouseholdToEvents(household.id)
+                }
+                .onFailure {
+                    _householdError.value = it.message ?: "Could not create a household"
+                }
+        }
+    }
+
+    private suspend fun publishHouseholdToEvents(householdId: String) {
+        val deviceId = preferencesManager.ensureDeviceId()
+        container.remoteSyncDataSource.sendHouseholdId(householdId, deviceId)
+    }
+
+    /** Joins an existing household using the code shown on the home device. */
+    fun joinHousehold(inviteCode: String) {
+        viewModelScope.launch {
+            _householdError.value = null
+            _isRefreshingMonitoring.value = true
+            val remote = container.monitoringRemoteDataSource
+            val normalised = MonitoringRemoteDataSource.normaliseInviteCode(inviteCode)
+            if (normalised.length != 8) {
+                _householdError.value =
+                    getApplication<Application>().getString(R.string.monitor_setup_code_hint)
+                _isRefreshingMonitoring.value = false
+                return@launch
+            }
+            remote.findHouseholdByCode(normalised)
+                .onSuccess { household ->
+                    val deviceId = preferencesManager.ensureDeviceId()
+                    remote.joinHousehold(household.id, deviceId, "MONITORING")
+                        .onFailure {
+                            // Already a member is fine; anything else is not.
+                            if (!it.message.orEmpty().contains("duplicate", ignoreCase = true)) {
+                                _householdError.value = it.message
+                            }
+                        }
+                    preferencesManager.setHousehold(household.id, household.inviteCode)
+                    _householdId.value = household.id
+                    _householdInviteCode.value = household.inviteCode
+                    refreshMonitoring()
+                }
+                .onFailure {
+                    _householdError.value = it.message ?: "Could not connect"
+                }
+            _isRefreshingMonitoring.value = false
+        }
+    }
+
+    /**
+     * Reloads everything the caregiver dashboard shows.
+     *
+     * Section 27 wants current status, last check-in, online state, battery, internet, and recent
+     * events. Each is read independently so one failing query does not blank the whole screen.
+     */
+    fun refreshMonitoring() {
+        val householdId = _householdId.value
+        if (householdId.isNullOrBlank()) {
+            _caregiverLoadState.value = CaregiverLoadState.Error("No household connected")
+            return
+        }
+        viewModelScope.launch {
+            _isRefreshingMonitoring.value = true
+            val remote = container.monitoringRemoteDataSource
+
+            val devices = remote.listDevices(householdId)
+            val emergencies = remote.listEmergencyEvents(householdId)
+            val checkIns = remote.listCheckIns(householdId)
+            val members = remote.listMembers(householdId)
+
+            val firstError = listOf(devices, emergencies, checkIns, members)
+                .firstNotNullOfOrNull { (it as? Result<*>)?.exceptionOrNull() }
+
+            _monitoredDevice.value = devices.getOrNull()?.firstOrNull { it.deviceMode != "MONITORING_DEVICE" }
+            _remoteEmergencies.value = emergencies.getOrDefault(emptyList())
+            _remoteCheckIns.value = checkIns.getOrDefault(emptyList())
+            _householdMembers.value = members.getOrDefault(emptyList())
+            _lastMonitoringRefresh.value = System.currentTimeMillis()
+
+            _caregiverLoadState.value = if (firstError != null) {
+                CaregiverLoadState.Error(firstError.message ?: "Load failed")
+            } else {
+                CaregiverLoadState.Loaded(System.currentTimeMillis())
+            }
+            _isRefreshingMonitoring.value = false
+        }
+    }
+
+    fun dismissHouseholdError() {
+        _householdError.value = null
     }
 
     override fun onCleared() {

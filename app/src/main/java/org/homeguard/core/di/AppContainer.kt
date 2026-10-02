@@ -1,9 +1,12 @@
 package org.homeguard.core.di
 
 import android.content.Context
+import org.homeguard.BuildConfig
 import org.homeguard.core.communication.CommunicationManager
 import org.homeguard.core.data.EventRepository
+import org.homeguard.core.data.MonitoringRemoteDataSource
 import org.homeguard.core.data.SafetyRepository
+import org.homeguard.core.data.SupabaseAuthClient
 import org.homeguard.core.data.SupabaseRemoteSyncDataSource
 import org.homeguard.core.data.SyncRepository
 import org.homeguard.core.database.HomeGuardDatabase
@@ -38,8 +41,27 @@ class AppContainer(private val context: Context) {
         SafetyRepository(preferencesManager, eventRepository)
     }
 
+    val authClient: SupabaseAuthClient by lazy {
+        SupabaseAuthClient(
+            BuildConfig.SUPABASE_URL,
+            BuildConfig.SUPABASE_ANON_KEY
+        )
+    }
+
+    /**
+     * The write path shares the monitoring read path's session. Two separate clients would mint
+     * two anonymous auth users, and neither could see the other's rows under the household policies.
+     */
     val remoteSyncDataSource: SupabaseRemoteSyncDataSource by lazy {
-        SupabaseRemoteSyncDataSource()
+        SupabaseRemoteSyncDataSource(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            anonKey = BuildConfig.SUPABASE_ANON_KEY,
+            authClient = authClient
+        )
+    }
+
+    val monitoringRemoteDataSource: MonitoringRemoteDataSource by lazy {
+        MonitoringRemoteDataSource(authClient, BuildConfig.SUPABASE_URL)
     }
 
     val syncRepository: SyncRepository by lazy {

@@ -24,6 +24,9 @@ class SupabaseRemoteSyncDataSource(
 
     val isConfigured: Boolean get() = authClient.isConfigured()
 
+    /** True once an anonymous session exists, so the UI can report "not signed in" separately. */
+    fun hasSession(): Boolean = authClient.hasSession()
+
     override suspend fun sendEvent(event: PendingEventEntity): Result<Unit> = withContext(Dispatchers.IO) {
         if (!isConfigured) {
             Log.w("SupabaseSync", "Supabase credentials not configured; keeping event queued.")
@@ -165,7 +168,36 @@ class SupabaseRemoteSyncDataSource(
         }
     }
 
-    private suspend fun postToSupabase(table: String, jsonBody: String) {
+    /**
+     * Stamps the household id onto this device's row.
+     *
+     * Without it the device is invisible to caregivers even after they have joined the household,
+     * because every read filters on household_id.
+     */
+    suspend fun sendHouseholdId(
+        householdId: String,
+        deviceId: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext Result.failure(RemoteNotConfiguredException())
+        try {
+            val body = JSONObject().apply { put("household_id", householdId) }
+            postToSupabase(
+                "devices?device_id=eq.${java.net.URLEncoder.encode(deviceId, "UTF-8")}",
+                body.toString(),
+                method = "PATCH"
+            )
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("SupabaseSync", "Could not attach device to household: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun postToSupabase(
+        table: String,
+        jsonBody: String,
+        method: String = "POST"
+    ) {
         // RLS is scoped to auth.uid(), so an unauthenticated request would be rejected outright.
         val token = authClient.accessToken()
             ?: throw RemoteNotConfiguredException()
@@ -174,7 +206,7 @@ class SupabaseRemoteSyncDataSource(
         val url = URL("$cleanUrl/rest/v1/$table")
         val conn = url.openConnection() as HttpURLConnection
         try {
-            conn.requestMethod = "POST"
+            conn.requestMethod = method
             conn.setRequestProperty("apikey", anonKey)
             conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Content-Type", "application/json")

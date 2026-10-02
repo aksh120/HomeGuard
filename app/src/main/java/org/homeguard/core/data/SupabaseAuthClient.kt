@@ -30,7 +30,20 @@ class SupabaseAuthClient(
 
     fun isConfigured(): Boolean = supabaseUrl.isNotBlank() && anonKey.isNotBlank()
 
-    /** Returns a usable access token, refreshing it if the cached one has expired. */
+    /**
+     * True once an anonymous session has been obtained.
+     *
+     * Surfaced so the UI can distinguish "signed in" from "cannot reach auth", which otherwise look
+     * identical: a failed session makes every request throw RemoteNotConfiguredException.
+     */
+    fun hasSession(): Boolean = cachedAccessToken != null
+
+    /** Forces a fresh session on the next call. Used when a request is rejected as unauthorised. */
+    fun invalidate() {
+        cachedAccessToken = null
+    }
+
+    /** Access token, or null when no session could be established. */
     suspend fun accessToken(): String? {
         if (!isConfigured()) return null
         cachedAccessToken?.let { return it }
@@ -39,8 +52,27 @@ class SupabaseAuthClient(
         }
     }
 
-    fun invalidate() {
-        cachedAccessToken = null
+    /**
+ * The `sub` claim of the current session, i.e. this install's auth user id.
+ *
+ * Read from the JWT payload rather than a second network call, so joining a household costs one
+ * request. Returns an empty string when there is no session; callers must treat that as an error
+ * rather than sending an empty user_id.
+ */
+fun currentUserId(): String {
+        val token = cachedAccessToken ?: return ""
+        return try {
+            val parts = token.split(".")
+            if (parts.size < 2) return ""
+            val payload = String(
+                android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE or
+                    android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
+            )
+            JSONObject(payload).optString("sub")
+        } catch (e: Exception) {
+            Log.e("SupabaseAuth", "Could not read the session subject: ${e.message}")
+            ""
+        }
     }
 
     private suspend fun requestAnonymousSession(): String? = withContext(Dispatchers.IO) {

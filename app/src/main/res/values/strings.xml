@@ -16,6 +16,7 @@
     <string name="wifi_connected">Connected</string>
     <string name="wifi_disconnected">Not connected</string>
     <string name="battery_status_format">%1$d%%</string>
+    <string name="battery_percent">%1$d%%</string>
     <string name="battery_charging">Charging</string>
     <string name="battery_not_charging">Not charging</string>
     <string name="battery_low_warning">Low battery</string>
@@ -147,6 +148,62 @@
     <string name="audit_check_in">Safety check confirmed</string>
     <string name="audit_emergency_resolved">Emergency stopped by the resident</string>
     <string name="audit_check_in_missed">Scheduled check-in not answered</string>
+
+    <!-- Sync status: can alerts actually leave this device? -->
+    <string name="sync_ok">Alerts can be sent</string>
+    <string name="sync_ok_detail">Connected and sending normally</string>
+    <string name="sync_pending">Not sent yet</string>
+    <string name="sync_pending_detail">Waiting for the first successful send</string>
+    <string name="sync_local_only">This device only</string>
+    <string name="sync_local_only_detail">No cloud configured. Alerts are kept here and will not reach anyone.</string>
+    <string name="sync_not_signed_in">Not signed in</string>
+    <string name="sync_not_signed_in_detail">Cannot reach the alert service. Check the internet connection.</string>
+    <string name="sync_error">Alerts are not being sent</string>
+    <string name="sync_error_detail">%1$s. Alerts are saved here until this is fixed.</string>
+
+    <!-- Caregiver dashboard (section 6B) -->
+    <string name="caregiver_title">Monitoring</string>
+    <string name="caregiver_default_household">Home</string>
+    <string name="caregiver_refresh">Refresh</string>
+    <string name="caregiver_last_refreshed">Last checked %1$s</string>
+    <string name="caregiver_loading">Loading…</string>
+    <string name="caregiver_load_failed">Could not load the device</string>
+    <string name="caregiver_no_device_title">No device found</string>
+    <string name="caregiver_no_device_body">This account is not sharing a home device yet. Check the invite code on the HomeGuard device at home.</string>
+    <string name="caregiver_recent_activity">Recent activity</string>
+    <string name="caregiver_no_activity">Nothing has been reported yet.</string>
+    <string name="caregiver_emergency_alert">Emergency alert</string>
+    <string name="caregiver_emergency_advice">Contact them now. If you cannot reach them, consider calling local emergency services.</string>
+    <string name="caregiver_stale_notice">This device has not reported recently. That may mean the phone is off or has no internet. It is not by itself an emergency.</string>
+    <string name="caregiver_last_seen">Last seen</string>
+    <string name="caregiver_last_checkin">Last check-in</string>
+    <string name="caregiver_who_can_see">People in this household</string>
+    <string name="caregiver_no_members">Only you are connected.</string>
+    <string name="caregiver_role_protected">Device at home</string>
+    <string name="caregiver_role_monitoring">Monitoring contact</string>
+    <string name="caregiver_emergency_row">Emergency alert</string>
+    <string name="caregiver_checkin_row">Safety check completed</string>
+    <string name="caregiver_resolved">Resolved</string>
+    <string name="dash">—</string>
+
+    <!-- Caregiver onboarding -->
+    <string name="monitor_setup_title">Connect to a home device</string>
+    <string name="monitor_setup_body">Enter the invite code shown on the HomeGuard device at home. You will see its safety status and any alerts, but you cannot trigger anything on it.</string>
+    <string name="monitor_setup_code_label">Invite code</string>
+    <string name="monitor_setup_code_hint">8 characters</string>
+    <string name="monitor_setup_join">Connect</string>
+    <string name="monitor_setup_connected">Connected to %1$s</string>
+    <string name="monitor_setup_failed">Could not connect: %1$s</string>
+    <string name="monitor_switch_to_protected">This is my own phone</string>
+    <string name="monitor_switch_to_monitoring">I am watching someone else\'s device</string>
+
+    <!-- Household sharing -->
+    <string name="household_title">Share with a contact</string>
+    <string name="household_body">A contact who knows this code can see the safety status of this device on their own phone. They cannot trigger anything.</string>
+    <string name="household_code_label">Your invite code</string>
+    <string name="household_not_shared">Not shared yet</string>
+    <string name="household_create">Create a code</string>
+    <string name="household_share_instructions">Read this code to your contact, or send it to them. They enter it on their phone.</string>
 
     <!-- Common labels -->
     <string name="common_network">Internet</string>

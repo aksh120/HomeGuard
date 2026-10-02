@@ -24,12 +24,21 @@ class SyncWorker(
         val container = (applicationContext as? HomeGuardApplication)?.container
             ?: return Result.failure()
 
+        val remote = container.remoteSyncDataSource
+        val preferences = container.preferencesManager
+
         return try {
+            // Record the attempt first, so a crash mid-sync still leaves a timestamp behind.
+            preferences.recordSyncAttempt(
+                configured = remote.isConfigured,
+                authenticated = remote.hasSession()
+            )
+
             // Heartbeat first so a monitoring contact can see the device is alive even when
             // there is nothing queued.
-            val deviceId = container.preferencesManager.ensureDeviceId()
+            val deviceId = preferences.ensureDeviceId()
             val battery = container.batteryMonitor.batteryInfo.value
-            val heartbeat = container.remoteSyncDataSource.sendHeartbeat(
+            val heartbeat = remote.sendHeartbeat(
                 deviceId = deviceId,
                 batteryLevel = battery.level,
                 isCharging = battery.isCharging
@@ -40,15 +49,24 @@ class SyncWorker(
 
             val result = container.syncRepository.syncPendingEvents()
             val failure = result.exceptionOrNull()
+
             if (result.isSuccess) {
+                preferences.recordSyncSuccess()
                 Result.success()
             } else if (failure is RemoteNotConfiguredException) {
-                // Nothing to retry against; keep events queued and wait for configuration.
+                // Credentials or session missing. Keep events queued, and record why so the app
+                // can tell the user their alerts are not reaching anyone.
+                preferences.recordSyncError("Not signed in to Supabase")
+                Log.w("SyncWorker", "Supabase not configured or not signed in; events stay queued.")
+                // Do not retry in a tight loop: this will not fix itself without a config change.
                 Result.success()
             } else {
+                preferences.recordSyncError(failure?.message ?: "Sync failed")
                 Result.retry()
             }
         } catch (e: Exception) {
+            runCatching { preferences.recordSyncError(e.message ?: "Unexpected error") }
+            Log.e("SyncWorker", "Sync failed: ${e.message}")
             Result.retry()
         }
     }

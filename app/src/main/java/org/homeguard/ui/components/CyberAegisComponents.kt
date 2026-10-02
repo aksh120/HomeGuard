@@ -473,7 +473,8 @@ fun CyberButton(
     accentColor: Color = MaterialTheme.colorScheme.primary,
     icon: ImageVector? = null,
     isSecondary: Boolean = false,
-    minHeight: Int = 64
+    minHeight: Int = 64,
+    enabled: Boolean = true
 ) {
     val containerColor = if (isSecondary) {
         MaterialTheme.colorScheme.surfaceVariant
@@ -488,6 +489,7 @@ fun CyberButton(
 
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = minHeight.dp)

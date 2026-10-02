@@ -22,6 +22,7 @@ import org.homeguard.core.model.HomeInfo
 import org.homeguard.core.model.MedicalInfo
 import org.homeguard.core.model.NightModeSchedule
 import org.homeguard.core.model.SafetyStatus
+import org.homeguard.core.model.SyncHealth
 import java.util.UUID
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "homeguard_prefs")
@@ -82,8 +83,69 @@ class PreferencesManager(private val context: Context) {
         // Safety notice acknowledgement (section 52)
         val KEY_ACK_SAFETY_NOTICE = booleanPreferencesKey("acknowledged_safety_notice")
 
+        // Sync health (section 53: "Is the device working?")
+        val KEY_SYNC_LAST_ATTEMPT = longPreferencesKey("sync_last_attempt_at")
+        val KEY_SYNC_LAST_SUCCESS = longPreferencesKey("sync_last_success_at")
+        val KEY_SYNC_LAST_ERROR = stringPreferencesKey("sync_last_error")
+        val KEY_SYNC_REMOTE_CONFIGURED = booleanPreferencesKey("sync_remote_configured")
+        val KEY_SYNC_AUTHENTICATED = booleanPreferencesKey("sync_authenticated")
+
+        // Household sharing (sections 6B and 27)
+        val KEY_HOUSEHOLD_ID = stringPreferencesKey("household_id")
+        val KEY_HOUSEHOLD_INVITE_CODE = stringPreferencesKey("household_invite_code")
+
         /** Separator for the persisted check-in time list. */
         private const val TIME_SEPARATOR = ","
+    }
+
+    /**
+     * Last known outcome of a sync attempt.
+     *
+     * Persisted rather than held in memory so a stuck queue is visible after a restart. Without
+     * this the app cannot answer section 53's fourth question, and a broken remote looks
+     * identical to a working one.
+     */
+    val syncHealthFlow: Flow<SyncHealth> = dataStore.data.map { prefs ->
+        SyncHealth(
+            isRemoteConfigured = prefs[KEY_SYNC_REMOTE_CONFIGURED] ?: false,
+            isAuthenticated = prefs[KEY_SYNC_AUTHENTICATED] ?: false,
+            lastAttemptAt = prefs[KEY_SYNC_LAST_ATTEMPT],
+            lastSuccessAt = prefs[KEY_SYNC_LAST_SUCCESS],
+            lastError = prefs[KEY_SYNC_LAST_ERROR]
+        )
+    }
+
+    suspend fun recordSyncAttempt(configured: Boolean, authenticated: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_SYNC_LAST_ATTEMPT] = System.currentTimeMillis()
+            prefs[KEY_SYNC_REMOTE_CONFIGURED] = configured
+            prefs[KEY_SYNC_AUTHENTICATED] = authenticated
+        }
+    }
+
+    suspend fun recordSyncSuccess() {
+        dataStore.edit { prefs ->
+            prefs[KEY_SYNC_LAST_SUCCESS] = System.currentTimeMillis()
+            prefs[KEY_SYNC_LAST_ERROR] = ""
+        }
+    }
+
+    suspend fun recordSyncError(message: String) {
+        dataStore.edit { prefs ->
+            prefs[KEY_SYNC_LAST_ERROR] = message
+        }
+    }
+
+    /** Household this device belongs to, or null when it is not shared yet. */
+    val householdFlow: Flow<Pair<String?, String?>> = dataStore.data.map { prefs ->
+        prefs[KEY_HOUSEHOLD_ID] to prefs[KEY_HOUSEHOLD_INVITE_CODE]
+    }
+
+    suspend fun setHousehold(householdId: String, inviteCode: String) {
+        dataStore.edit { prefs ->
+            prefs[KEY_HOUSEHOLD_ID] = householdId
+            prefs[KEY_HOUSEHOLD_INVITE_CODE] = inviteCode
+        }
     }
 
     /**
