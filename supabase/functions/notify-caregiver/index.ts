@@ -63,6 +63,10 @@ function json(body: unknown, status = 200): Response {
  * Uses the service role deliberately: the row was written by the device's own
  * session, but this function has no user JWT to filter on. It only ever reads the
  * single device named in the webhook payload.
+ *
+ * Throws on a PostgREST failure rather than returning an empty list. Swallowing
+ * the error would make "the table does not exist" look exactly like "no contacts
+ * are configured", which is a genuinely dangerous ambiguity for a safety alert.
  */
 async function loadRecipients(
   deviceId: string
@@ -71,24 +75,32 @@ async function loadRecipients(
     apikey: SERVICE_ROLE_KEY,
     Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
   };
+  const encoded = encodeURIComponent(deviceId);
 
-  const [deviceRes, contactRes] = await Promise.all([
-    fetch(
-      `${SUPABASE_URL}/rest/v1/devices?device_id=eq.${encodeURIComponent(deviceId)}&select=device_id,person_name,person_role&limit=1`,
-      { headers }
+  const read = async (url: string, label: string): Promise<unknown[]> => {
+    const res = await fetch(url, { headers });
+    if (!res.ok) {
+      const body = await res.text();
+      throw new Error(`${label} query failed (HTTP ${res.status}): ${body}`);
+    }
+    return (await res.json()) as unknown[];
+  };
+
+  const [devices, contacts] = await Promise.all([
+    read(
+      `${SUPABASE_URL}/rest/v1/devices?device_id=eq.${encoded}&select=device_id,person_name,person_role&limit=1`,
+      "devices"
     ),
-    fetch(
-      `${SUPABASE_URL}/rest/v1/monitoring_contacts?device_id=eq.${encodeURIComponent(
-        deviceId
-      )}&select=name,email,phone&order=is_primary.desc`,
-      { headers }
+    read(
+      `${SUPABASE_URL}/rest/v1/monitoring_contacts?device_id=eq.${encoded}&select=name,email,phone&order=is_primary.desc`,
+      "monitoring_contacts"
     ),
   ]);
 
-  const device = deviceRes.ok ? ((await deviceRes.json()) as DeviceRow[])[0] ?? null : null;
-  const contacts = contactRes.ok ? ((await contactRes.json()) as ContactRow[]) : [];
-
-  return { device, contacts };
+  return {
+    device: (devices as DeviceRow[])[0] ?? null,
+    contacts: contacts as ContactRow[],
+  };
 }
 
 /** Sends the alert email. Swallows failures: a webhook must not retry forever. */
@@ -172,7 +184,32 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    return json({ sent, total: withEmail.length, smsPending: smsOnly.length });
+    if (!device) {
+      console.warn(
+        `Device ${record.device_id} is not registered. Has the app completed setup and synced?`
+      );
+    }
+    if (contacts.length === 0) {
+      console.warn(
+        `No monitoring contact for device ${record.device_id}. The app must save Settings ` +
+          `with a primary contact email at least once.`
+      );
+    }
+
+    return json({
+      sent,
+      total: withEmail.length,
+      smsPending: smsOnly.length,
+      deviceFound: device !== null,
+      contactsFound: contacts.length,
+      // Spells out the most likely cause, so an empty send is never a mystery.
+      reason:
+        sent > 0
+          ? null
+          : contacts.length === 0
+          ? "no monitoring contact configured for this device"
+          : "contact has no email address; SMS is not implemented",
+    });
   } catch (err) {
     console.error("notify-caregiver failed:", err);
     // 500 makes Supabase retry the webhook, which is what we want for a transient fault.
