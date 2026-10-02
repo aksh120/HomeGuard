@@ -20,14 +20,29 @@ interface PendingEventDao {
     @Query("DELETE FROM pending_events WHERE id = :id")
     suspend fun deleteById(id: String)
 
-    @Query("SELECT * FROM pending_events WHERE syncStatus = 'PENDING' ORDER BY timestamp ASC")
-    suspend fun getPendingEvents(): List<PendingEventEntity>
+    /**
+     * Includes retryable FAILED rows. Filtering on PENDING alone stranded every event after a
+     * single transient network error, because [markEventFailed] had already flipped the status.
+     */
+    @Query(
+        """
+        SELECT * FROM pending_events
+        WHERE syncStatus = 'PENDING'
+           OR (syncStatus = 'FAILED' AND retryCount < :maxRetries)
+        ORDER BY timestamp ASC
+        """
+    )
+    suspend fun getPendingEvents(maxRetries: Int): List<PendingEventEntity>
 
     @Query("SELECT COUNT(*) FROM pending_events WHERE syncStatus = 'PENDING'")
     fun getPendingCountFlow(): Flow<Int>
 
     @Query("SELECT * FROM pending_events WHERE id = :id")
     suspend fun getById(id: String): PendingEventEntity?
+
+    companion object {
+        const val MAX_RETRIES = 10
+    }
 }
 
 @Dao

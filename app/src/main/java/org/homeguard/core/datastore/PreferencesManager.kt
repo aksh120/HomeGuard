@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.ContactInfo
@@ -54,8 +55,29 @@ class PreferencesManager(private val context: Context) {
         val KEY_MEDICAL_NOTES = stringPreferencesKey("medical_notes")
 
         val KEY_NIGHT_MODE = booleanPreferencesKey("night_mode_enabled")
+        val KEY_ACOUSTIC_DETECTION = booleanPreferencesKey("acoustic_detection_enabled")
+        val KEY_CHECKIN_INTERVAL_HOURS = intPreferencesKey("checkin_interval_hours")
+        val KEY_CHECKIN_GRACE_MINUTES = intPreferencesKey("checkin_grace_minutes")
         val KEY_LAST_CHECKIN = longPreferencesKey("last_checkin_timestamp")
         val KEY_SAFETY_STATUS = stringPreferencesKey("current_safety_status")
+    }
+
+    /**
+     * Stable device identity. Previously this fell back to a fresh UUID on every emission, so any
+     * event recorded before setup completed carried an ID that no longer existed.
+     */
+    val deviceIdFlow: Flow<String> = dataStore.data
+        .map { prefs -> prefs[KEY_DEVICE_ID] ?: UUID.randomUUID().toString() }
+        .distinctUntilChanged()
+
+    /** Persists the device ID on first call so it survives process death and reboots. */
+    suspend fun ensureDeviceId(): String {
+        var resolved = ""
+        dataStore.edit { prefs ->
+            val existing = prefs[KEY_DEVICE_ID]
+            resolved = existing ?: UUID.randomUUID().toString().also { prefs[KEY_DEVICE_ID] = it }
+        }
+        return resolved
     }
 
     val appConfigFlow: Flow<AppConfig> = dataStore.data.map { prefs ->
@@ -66,7 +88,7 @@ class PreferencesManager(private val context: Context) {
             } catch (e: Exception) {
                 DeviceMode.PROTECTED_DEVICE
             },
-            deviceId = prefs[KEY_DEVICE_ID] ?: UUID.randomUUID().toString(),
+            deviceId = prefs[KEY_DEVICE_ID] ?: "",
             personName = prefs[KEY_PERSON_NAME] ?: "",
             personRole = prefs[KEY_PERSON_ROLE] ?: "",
             primaryContact = ContactInfo(
@@ -94,7 +116,10 @@ class PreferencesManager(private val context: Context) {
                 doctorContact = prefs[KEY_DOCTOR] ?: "",
                 notes = prefs[KEY_MEDICAL_NOTES] ?: ""
             ),
-            isNightModeEnabled = prefs[KEY_NIGHT_MODE] ?: false
+            isNightModeEnabled = prefs[KEY_NIGHT_MODE] ?: false,
+            isAcousticDetectionEnabled = prefs[KEY_ACOUSTIC_DETECTION] ?: false,
+            checkInIntervalHours = prefs[KEY_CHECKIN_INTERVAL_HOURS] ?: 24,
+            checkInGracePeriodMinutes = prefs[KEY_CHECKIN_GRACE_MINUTES] ?: 60
         )
     }
 
@@ -114,7 +139,10 @@ class PreferencesManager(private val context: Context) {
         dataStore.edit { prefs ->
             prefs[KEY_SETUP_COMPLETE] = config.isSetupComplete
             prefs[KEY_DEVICE_MODE] = config.deviceMode.name
-            prefs[KEY_DEVICE_ID] = config.deviceId
+            // Never overwrite a real identity with a blank one from an unhydrated config.
+            if (config.deviceId.isNotBlank()) {
+                prefs[KEY_DEVICE_ID] = config.deviceId
+            }
             prefs[KEY_PERSON_NAME] = config.personName
             prefs[KEY_PERSON_ROLE] = config.personRole
             prefs[KEY_PRIMARY_CONTACT_NAME] = config.primaryContact.name
@@ -133,6 +161,15 @@ class PreferencesManager(private val context: Context) {
             prefs[KEY_DOCTOR] = config.medicalInfo.doctorContact
             prefs[KEY_MEDICAL_NOTES] = config.medicalInfo.notes
             prefs[KEY_NIGHT_MODE] = config.isNightModeEnabled
+            prefs[KEY_ACOUSTIC_DETECTION] = config.isAcousticDetectionEnabled
+            prefs[KEY_CHECKIN_INTERVAL_HOURS] = config.checkInIntervalHours
+            prefs[KEY_CHECKIN_GRACE_MINUTES] = config.checkInGracePeriodMinutes
+        }
+    }
+
+    suspend fun setAcousticDetectionEnabled(enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[KEY_ACOUSTIC_DETECTION] = enabled
         }
     }
 

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!--
+      System bar colours are set in HomeGuardTheme (Theme.kt) via a SideEffect, which runs after
+      this style is applied. Declaring them here would be silently overwritten.
+    -->
     <style name="Theme.HomeGuard" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">@color/homeguard_background</item>
     </style>
 </resources>

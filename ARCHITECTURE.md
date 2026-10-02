@@ -9,29 +9,30 @@ HomeGuard is architected as an **offline-first, event-driven, reactive system** 
 │               Jetpack Compose UI Layer                 │
 │  (Protected Home, Emergency Screen, Monitoring Dash)   │
 └──────────────────────────▲─────────────────────────────┘
-                           │ UI State (StateFlow) / Events
+│ UI State (StateFlow) / Events
 ┌──────────────────────────┴─────────────────────────────┐
 │                   ViewModel Layer                      │
-│     (HomeViewModel, EmergencyViewModel, SetupVM)       │
+│              (HomeViewModel — single VM)               │
 └──────────────────────────▲─────────────────────────────┘
-                           │ Domain Models / Use Cases
-┌──────────────────────────┴─────────────────────────────┐
-│                 Domain / Use Cases                     │
-│    TriggerSosUseCase, SubmitCheckInUseCase, SyncEvents │
-└──────────────────────────▲─────────────────────────────┘
-                           │ Repositories
+                           │ AppContainer (composition root)
 ┌──────────────────────────┴─────────────────────────────┐
 │                  Repository Layer                      │
-│  SafetyRepo, SyncRepo, BatteryRepo, NetworkRepo, Config│
+│        SafetyRepository, EventRepository, SyncRepository│
+│        SupabaseRemoteSyncDataSource                    │
 └────────────┬─────────────────────────────┬─────────────┘
              │                             │
     ┌────────▼────────┐           ┌────────▼────────┐
     │   Local Store   │           │   Remote / API  │
     │  - Room Queue   │           │ - Supabase REST │
-    │  - DataStore    │           │ - Realtime      │
-    │  - Hardware API │           │ - Mock Client   │
-    └─────────────────┘           └─────────────────┘
+    │  - DataStore    │           │ - Auth session  │
+    │  - Hardware API │           └─────────────────┘
+    └─────────────────┘
 ```
+
+**No DI framework.** Dependencies are wired by hand in
+[`AppContainer`](app/src/main/java/org/homeguard/core/di/AppContainer.kt), held by
+`HomeGuardApplication`, and consumed by both `HomeViewModel` and `SyncWorker`. This is deliberate:
+`CONTRIBUTING.md` principle 1 forbids bloat, and the graph is small enough to read in one screen.
 
 ---
 
@@ -136,9 +137,11 @@ Key-value configuration including:
 - Protected person profile: Name, relationship.
 - Primary, secondary, emergency contact details.
 - Home address & emergency instructions.
-- Check-in configuration: Schedules, grace period, timeout duration.
-- Night Mode configuration: Enabled, start time, end time.
+- Check-in configuration: interval and grace period (persisted).
+- Night Mode configuration: enabled flag.
+- Acoustic smoke detection: enabled flag.
 - Application mode: `PROTECTED_DEVICE` vs `MONITORING_DEVICE`.
+- Stable device identity: minted once via `ensureDeviceId()` and persisted, so it survives process death and does not depend on the setup wizard being finished.
 
 ### B. Room Database (`HomeGuardDatabase`)
 Relational audit and queue tables:
@@ -149,9 +152,12 @@ Relational audit and queue tables:
 
 ## 6. Remote Synchronization & Backend API
 
-HomeGuard supports a pluggable backend interface (`RemoteSyncDataSource`):
-- **Local / Mock Implementation**: Allows testing and full standalone utility without any cloud account.
-- **Supabase / REST Implementation**:
+HomeGuard uses a single backend implementation (`RemoteSyncDataSource`):
+- **Supabase / REST implementation** (`SupabaseRemoteSyncDataSource`):
   - Tables: `devices`, `emergency_events`, `check_ins`, `device_status`.
-  - Row Level Security (RLS) protects device records by user identity.
-  - Idempotent API endpoints using unique event UUIDs prevent duplicate alerts.
+  - Authentication: the client bootstraps an **anonymous Supabase session** (`POST /auth/v1/signup`) and sends that JWT. The anon key alone is not an identity.
+  - Row Level Security scopes every table to `auth.uid() = user_id`, so one install can never read or write another's rows.
+  - Idempotent writes use `Prefer: resolution=merge-duplicates` against client-generated event UUIDs, preventing duplicate alerts.
+  - `registerDevice()` runs before the first event so the foreign keys into `devices` resolve.
+
+- **Unconfigured builds**: with no credentials the data source returns `RemoteNotConfiguredException`. Events stay queued and the worker reports success without consuming retries, so a missing key can never silently discard an SOS.

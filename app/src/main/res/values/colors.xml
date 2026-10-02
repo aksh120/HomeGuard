@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Referenced from Theme.HomeGuard so the window background matches the Compose surface
+         before the first frame is drawn. -->
+    <color name="homeguard_background">#FF060911</color>
+</resources>

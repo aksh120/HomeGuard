@@ -62,10 +62,14 @@ HomeGuard runs effortlessly on older, low-cost Android hardware (even without a 
 ## 🛡️ Core Pillars
 
 ### 1. Guaranteed Zero SOS Loss (Offline-First Queue)
-In an emergency, network connectivity is never guaranteed. HomeGuard commits every emergency trigger atomically to an encrypted local **Room database queue (`pending_events`)** before any network I/O is attempted.
-- **Online**: Dispatched instantly via Supabase PostgREST with unique idempotency tokens (`UUIDv4`).
+In an emergency, network connectivity is never guaranteed. HomeGuard commits every emergency trigger atomically — a Room `@Transaction` spanning both tables — to a local **Room database queue (`pending_events`)** before any network I/O is attempted. The database is stored in the app's private sandbox and is excluded from cloud backup.
+- **Online**: Dispatched instantly via Supabase PostgREST with unique idempotency tokens (`UUIDv4`), sent with `Prefer: resolution=merge-duplicates`.
 - **Offline**: Safely preserved across device reboots and process terminations.
-- **Restoration**: Automatically detected by `ConnectivityManager.NetworkCallback` and drained via `WorkManager`. Duplicate alerts are mathematically impossible.
+- **Restoration**: Automatically detected by `ConnectivityManager.NetworkCallback` and drained via `WorkManager`.
+- **Retries**: A failed send is retried on every subsequent pass, up to 10 attempts. A failed event is *never* deleted — only a confirmed delivery removes it. A build with no Supabase credentials keeps events queued rather than discarding them.
+- Duplicate alerts are mathematically impossible.
+
+> **Not encrypted at rest.** The local database is sandboxed and backup-excluded, but it is not SQLCipher-encrypted. Protecting data on a rooted or unlocked device is out of scope.
 
 ### 2. Tri-State Safety Intelligence
 Never assume safety simply because a phone is plugged in or connected to Wi-Fi. HomeGuard enforces an honest, non-alarmist safety state machine:
@@ -109,7 +113,7 @@ Because the protected phone may not have an active cellular SIM card, HomeGuard 
 
 ### 5. Complete Neutrality & Localization
 HomeGuard is built for international adoption:
-- 100% of user-facing strings live in [`res/values/strings.xml`](app/src/main/res/values/strings.xml).
+- All user-facing strings live in [`res/values/strings.xml`](app/src/main/res/values/strings.xml). This is a project rule ([`CONTRIBUTING.md`](CONTRIBUTING.md) principle 4); do not hardcode display text in Kotlin.
 - Zero hardcoded family names (no *Mom*, *Dad*, *Son*, or personal identifiers).
 - Fully configurable local emergency numbers (supports 911, 112, 999, 100, etc.).
 
@@ -228,7 +232,7 @@ HomeGuard works completely offline out-of-the-box. When connected to a backend, 
 - **`device_status`**: Telemetry heartbeat, battery %, charging state, and online presence.
 - **`emergency_events`**: Immutable emergency event audit logs with unique UUIDs.
 - **`check_ins`**: Time-stamped "I'M OK" safety confirmations.
-- **Row Level Security (RLS)**: Policies enabled across all tables.
+- **Row Level Security (RLS)**: Every table is owned by an `auth.users` row and every policy is scoped with `auth.uid() = user_id`. The client bootstraps a Supabase **anonymous session** on first launch, so each install has its own identity and can only ever read or write its own records. An unauthenticated request holding only the public anon key matches no rows.
 
 ### Quick Setup
 1. Create a free project at [supabase.com](https://supabase.com).
@@ -281,7 +285,9 @@ HomeGuard is safety-critical software designed around zero-knowledge principles:
 - **No Background GPS Tracking**: We deliberately do not request location permissions (`ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`).
 - **No Credential Exposure**: Sensitive keys and local configurations are read from `local.properties` (strictly ignored by Git) and compiled into `BuildConfig`.
 - **Sandbox Storage**: All local data is isolated in Android application-sandboxed Room databases and DataStore preferences.
-- **Strict Permission Footprint**: Only requests `CAMERA` (optional feature for torch flash) and `POST_NOTIFICATIONS`. No SMS, microphone, or storage reading permissions are requested.
+- **Strict Permission Footprint**: Requests `CAMERA` (optional, for the torch flash), `RECORD_AUDIO` (optional, for optional smoke-alarm detection), and `POST_NOTIFICATIONS`. No SMS, contacts, or location permissions are ever requested.
+  - The **microphone is off by default and opt-in.** The permission is requested only when the user explicitly enables acoustic smoke detection in Settings — never at launch, and never on resume. No audio is recorded or stored; only an amplitude/zero-crossing heuristic is evaluated in memory.
+  - The torch requests `CAMERA` only when the flashlight is first toggled.
 
 ---
 

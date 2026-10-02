@@ -73,14 +73,14 @@ fun EmergencyInfoScreen(
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = "SAFETY DOSSIER",
-            subtitle = "OFFLINE VAULT • PERSISTED",
+            title = stringResource(R.string.info_dossier_title),
+            subtitle = stringResource(R.string.info_offline_vault),
             onBackClick = onBackClick
         )
 
         // Quick Fire Evacuation Launcher
         CyberButton(
-            text = "FIRE EVACUATION PROTOCOL",
+            text = stringResource(R.string.info_fire_protocol),
             onClick = onOpenFireGuide,
             accentColor = StatusEmergency,
             icon = Icons.Default.LocalFireDepartment,
@@ -90,7 +90,7 @@ fun EmergencyInfoScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 1: EMERGENCY CONTACTS
-        DossierSectionTitle(icon = Icons.Default.Phone, title = "EMERGENCY CONTACTS")
+        DossierSectionTitle(icon = Icons.Default.Phone, title = stringResource(R.string.info_contacts_header))
         CyberGlassCard {
             DossierRow(
                 label = stringResource(R.string.info_primary_contact),
@@ -125,7 +125,7 @@ fun EmergencyInfoScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 2: HOME DISPATCH DETAILS
-        DossierSectionTitle(icon = Icons.Default.Home, title = "HOME DISPATCH & ACCESS")
+        DossierSectionTitle(icon = Icons.Default.Home, title = stringResource(R.string.info_home_dispatch))
         CyberGlassCard {
             DossierRow(
                 label = stringResource(R.string.info_home_address),
@@ -150,7 +150,7 @@ fun EmergencyInfoScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 3: MEDICAL DOSSIER
-        DossierSectionTitle(icon = Icons.Default.MedicalServices, title = "MEDICAL & BIOMETRIC PROFILE")
+        DossierSectionTitle(icon = Icons.Default.MedicalServices, title = stringResource(R.string.info_medical_profile))
         CyberGlassCard {
             val hasMedical = appConfig.medicalInfo.bloodGroup.isNotBlank() ||
                     appConfig.medicalInfo.allergies.isNotBlank() ||
@@ -174,7 +174,7 @@ fun EmergencyInfoScreen(
                 }
             } else {
                 Text(
-                    text = "No medical profile recorded. Configure in Settings if relevant for first responders.",
+                    text = stringResource(R.string.info_no_medical),
                     color = Color(0xFF64748B),
                     fontSize = 13.sp
                 )
@@ -209,8 +209,8 @@ fun FireGuideScreen(
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = "FIRE EVACUATION",
-            subtitle = "CRITICAL SAFETY PLAYBOOK",
+            title = stringResource(R.string.info_fire_evacuation),
+            subtitle = stringResource(R.string.info_critical_playbook),
             onBackClick = onBackClick
         )
 
@@ -229,8 +229,8 @@ fun FireGuideScreen(
                 ) {
                     Column {
                         Text(
-                            text = "LOCAL EMERGENCY DISPATCH",
-                            fontSize = 11.sp,
+                            text = stringResource(R.string.info_local_dispatch),
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.sp,
                             color = StatusEmergency
@@ -273,7 +273,7 @@ fun FireGuideScreen(
         )
 
         Text(
-            text = "EVACUATION STEPS",
+            text = stringResource(R.string.info_evacuation_steps),
             fontSize = 12.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 1.5.sp,
@@ -353,7 +353,7 @@ private fun DossierRow(label: String, value: String, accent: Color = Color.White
     Column(modifier = Modifier.padding(vertical = 4.dp)) {
         Text(
             text = label,
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF64748B),
             letterSpacing = 0.5.sp

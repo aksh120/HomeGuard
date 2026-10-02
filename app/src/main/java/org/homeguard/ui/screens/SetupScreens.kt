@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Sensors
@@ -30,6 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -61,7 +63,9 @@ import org.homeguard.ui.components.CyberTopAppBar
 fun SetupAndSettingsScreen(
     currentConfig: AppConfig,
     isInitialSetup: Boolean,
+    isAcousticEnabled: Boolean = false,
     onSaveConfig: (AppConfig) -> Unit,
+    onToggleAcoustic: () -> Unit = {},
     onBackClick: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -107,28 +111,30 @@ fun SetupAndSettingsScreen(
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = if (isInitialSetup) "INITIALIZATION" else "SENTINEL CONFIG",
-            subtitle = if (isInitialSetup) "AEGIS ARCHITECTURE SETUP" else "SECURITY & HARDWARE PREFERENCES",
+            title = if (isInitialSetup) stringResource(R.string.setup_initialization)
+            else stringResource(R.string.setup_sentinel_config),
+            subtitle = if (isInitialSetup) stringResource(R.string.setup_architecture)
+            else stringResource(R.string.setup_security_prefs),
             onBackClick = if (!isInitialSetup) onBackClick else null
         )
 
         // SECTION 1: OPERATIONAL MODE
-        CyberFormSectionHeader(icon = Icons.Default.Shield, title = "OPERATIONAL ROLE")
+        CyberFormSectionHeader(icon = Icons.Default.Shield, title = stringResource(R.string.setup_operational_role))
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             ModeSelectorTile(
-                title = "PROTECTED",
-                subtitle = "Companion HUD",
+                title = stringResource(R.string.setup_mode_protected_title),
+                subtitle = stringResource(R.string.setup_mode_protected_sub),
                 icon = Icons.Default.Shield,
                 isSelected = deviceMode == DeviceMode.PROTECTED_DEVICE,
                 onSelect = { deviceMode = DeviceMode.PROTECTED_DEVICE },
                 modifier = Modifier.weight(1f)
             )
             ModeSelectorTile(
-                title = "MONITORING",
-                subtitle = "Caregiver Array",
+                title = stringResource(R.string.setup_mode_monitoring_title),
+                subtitle = stringResource(R.string.setup_mode_monitoring_sub),
                 icon = Icons.Default.Sensors,
                 isSelected = deviceMode == DeviceMode.MONITORING_DEVICE,
                 onSelect = { deviceMode = DeviceMode.MONITORING_DEVICE },
@@ -139,129 +145,192 @@ fun SetupAndSettingsScreen(
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 2: IDENTITY
-        CyberFormSectionHeader(icon = Icons.Default.Person, title = "RESIDENT & SENTINEL PROFILE")
+        CyberFormSectionHeader(icon = Icons.Default.Person, title = stringResource(R.string.setup_resident_profile))
         CyberGlassCard {
             CyberTextField(
-                label = "Protected Person Name",
+                label = stringResource(R.string.setup_person_name_label),
                 value = personName,
                 onValueChange = { personName = it },
-                placeholder = "e.g. Alex"
+                placeholder = stringResource(R.string.setup_person_name_hint)
             )
             Spacer(modifier = Modifier.height(12.dp))
             CyberTextField(
-                label = "Role / Home Status",
+                label = stringResource(R.string.setup_role_label),
                 value = personRole,
                 onValueChange = { personRole = it },
-                placeholder = "e.g. Primary Resident, Resident, Solo"
+                placeholder = stringResource(R.string.setup_role_hint)
             )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 3: EMERGENCY DISPATCH CONTACTS
-        CyberFormSectionHeader(icon = Icons.Default.Phone, title = "COMMUNICATION DISPATCH LINKS")
+        CyberFormSectionHeader(icon = Icons.Default.Phone, title = stringResource(R.string.setup_dispatch_links))
         CyberGlassCard {
             CyberTextField(
-                label = "Primary Contact Name",
+                label = stringResource(R.string.setup_primary_contact_label),
                 value = primaryContactName,
                 onValueChange = { primaryContactName = it },
-                placeholder = "e.g. Jordan"
+                placeholder = stringResource(R.string.setup_primary_contact_hint)
             )
             Spacer(modifier = Modifier.height(10.dp))
             CyberTextField(
-                label = "Primary Phone / Webhook URL",
+                label = stringResource(R.string.setup_primary_phone_label),
                 value = primaryContactPhone,
                 onValueChange = { primaryContactPhone = it },
-                placeholder = "+1 555 0199 or https://..."
+                placeholder = stringResource(R.string.setup_primary_phone_hint)
             )
             Spacer(modifier = Modifier.height(14.dp))
             CyberTextField(
-                label = "Secondary Contact (Optional)",
-                value = secondaryContactPhone,
-                onValueChange = { secondaryContactPhone = it },
-                placeholder = "+1 555 0188"
+                label = stringResource(R.string.setup_secondary_contact_label),
+                value = secondaryContactName,
+                onValueChange = { secondaryContactName = it },
+                placeholder = stringResource(R.string.setup_secondary_contact_hint)
             )
             Spacer(modifier = Modifier.height(10.dp))
             CyberTextField(
-                label = "Local Emergency Dispatch Number",
+                label = stringResource(R.string.setup_secondary_phone_label),
+                value = secondaryContactPhone,
+                onValueChange = { secondaryContactPhone = it },
+                placeholder = stringResource(R.string.setup_secondary_phone_hint)
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            CyberTextField(
+                label = stringResource(R.string.setup_emergency_contact_label),
+                value = emergencyContactName,
+                onValueChange = { emergencyContactName = it },
+                placeholder = stringResource(R.string.setup_emergency_contact_hint)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = stringResource(R.string.setup_emergency_contact_phone_label),
+                value = emergencyContactPhone,
+                onValueChange = { emergencyContactPhone = it },
+                placeholder = stringResource(R.string.setup_primary_phone_hint)
+            )
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberTextField(
+                label = stringResource(R.string.setup_emergency_number_label),
                 value = localEmergencyNumber,
                 onValueChange = { localEmergencyNumber = it },
-                placeholder = "e.g. 911, 112, 999"
+                placeholder = stringResource(R.string.setup_emergency_number_hint)
             )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 4: PHYSICAL ADDRESS & ACCESS
-        CyberFormSectionHeader(icon = Icons.Default.Home, title = "LOCATION & PHYSICAL ACCESS")
+        CyberFormSectionHeader(icon = Icons.Default.Home, title = stringResource(R.string.setup_location_access))
         CyberGlassCard {
             CyberTextField(
-                label = "Physical Address / Apartment",
+                label = stringResource(R.string.setup_address_label),
                 value = homeAddress,
                 onValueChange = { homeAddress = it },
-                placeholder = "Street address, Apartment / Unit"
+                placeholder = stringResource(R.string.setup_address_hint)
             )
             Spacer(modifier = Modifier.height(10.dp))
             CyberTextField(
-                label = "Building Security Contact",
+                label = stringResource(R.string.setup_security_contact_label),
                 value = buildingSecurity,
                 onValueChange = { buildingSecurity = it },
-                placeholder = "Security desk or building manager"
+                placeholder = stringResource(R.string.setup_security_contact_hint)
             )
             Spacer(modifier = Modifier.height(10.dp))
             CyberTextField(
-                label = "Access Instructions / Gate Code",
+                label = stringResource(R.string.setup_access_label),
                 value = accessInstructions,
                 onValueChange = { accessInstructions = it },
-                placeholder = "Gate pin, keybox safe, instructions"
+                placeholder = stringResource(R.string.setup_access_hint)
             )
         }
 
         Spacer(modifier = Modifier.height(20.dp))
 
         // SECTION 5: BIOMETRIC / MEDICAL (OPTIONAL)
-        CyberFormSectionHeader(icon = Icons.Default.MedicalServices, title = "BIOMETRICS & MEDICAL (OPTIONAL)")
+        CyberFormSectionHeader(icon = Icons.Default.MedicalServices, title = stringResource(R.string.setup_medical_header))
         CyberGlassCard {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CyberTextField(
-                    label = "Blood Group",
+                    label = stringResource(R.string.setup_blood_group_label),
                     value = bloodGroup,
                     onValueChange = { bloodGroup = it },
-                    placeholder = "e.g. O+, A-",
+                    placeholder = stringResource(R.string.setup_blood_group_hint),
                     modifier = Modifier.weight(1f)
                 )
                 CyberTextField(
-                    label = "Known Allergies",
+                    label = stringResource(R.string.setup_allergies_label),
                     value = allergies,
                     onValueChange = { allergies = it },
-                    placeholder = "e.g. Penicillin",
+                    placeholder = stringResource(R.string.setup_allergies_hint),
                     modifier = Modifier.weight(1f)
                 )
             }
             Spacer(modifier = Modifier.height(10.dp))
             CyberTextField(
-                label = "Critical Medications",
+                label = stringResource(R.string.setup_medications_label),
                 value = medications,
                 onValueChange = { medications = it },
-                placeholder = "Daily medications or insulin prescriptions"
+                placeholder = stringResource(R.string.setup_medications_hint)
             )
             Spacer(modifier = Modifier.height(10.dp))
             CyberTextField(
-                label = "Primary Physician Contact",
+                label = stringResource(R.string.setup_doctor_label),
                 value = doctorContact,
                 onValueChange = { doctorContact = it },
-                placeholder = "Dr. Miller / Clinic (+1 555...)"
+                placeholder = stringResource(R.string.setup_doctor_hint)
             )
+        }
+
+        Spacer(modifier = Modifier.height(28.dp))
+
+        // Acoustic detection requires the microphone, so it is opt-in and explained in place.
+        CyberFormSectionHeader(icon = Icons.Default.Mic, title = stringResource(R.string.setup_acoustic_header))
+        CyberGlassCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.acoustic_toggle_title),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.acoustic_toggle_desc),
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8),
+                        lineHeight = 18.sp
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Switch(
+                    checked = isAcousticEnabled,
+                    onCheckedChange = { onToggleAcoustic() }
+                )
+            }
+            if (isAcousticEnabled) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.acoustic_active_notice),
+                    fontSize = 13.sp,
+                    color = StatusSafe,
+                    lineHeight = 18.sp
+                )
+            }
         }
 
         Spacer(modifier = Modifier.height(28.dp))
 
         // Commit Config Button
         CyberButton(
-            text = if (isInitialSetup) "INITIALIZE SENTINEL CORE" else "COMMIT CONFIGURATION",
+            text = if (isInitialSetup) stringResource(R.string.setup_initialize)
+            else stringResource(R.string.setup_commit),
             onClick = {
                 val updatedConfig = currentConfig.copy(
                     isSetupComplete = true,
@@ -340,7 +409,7 @@ private fun ModeSelectorTile(
             Column {
                 Text(
                     text = title,
-                    fontSize = 11.5.sp,
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 0.5.sp,
                     maxLines = 1,
@@ -348,7 +417,7 @@ private fun ModeSelectorTile(
                 )
                 Text(
                     text = subtitle,
-                    fontSize = 10.5.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     color = if (isSelected) Color(0xFF10B981) else Color(0xFF64748B)
@@ -373,7 +442,7 @@ private fun CyberFormSectionHeader(icon: ImageVector, title: String) {
         Spacer(modifier = Modifier.width(8.dp))
         Text(
             text = title,
-            fontSize = 11.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 1.sp,
             color = Color(0xFF94A3B8)

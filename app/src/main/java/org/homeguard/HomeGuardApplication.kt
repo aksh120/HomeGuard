@@ -5,11 +5,16 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import org.homeguard.core.di.AppContainer
 
 class HomeGuardApplication : Application() {
 
+    lateinit var container: AppContainer
+        private set
+
     override fun onCreate() {
         super.onCreate()
+        container = AppContainer(this)
         createNotificationChannels()
     }
 

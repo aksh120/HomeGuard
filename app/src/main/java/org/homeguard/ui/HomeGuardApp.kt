@@ -22,7 +22,9 @@ import org.homeguard.ui.screens.SetupAndSettingsScreen
 
 @Composable
 fun HomeGuardApp(
-    viewModel: HomeViewModel = viewModel()
+    viewModel: HomeViewModel = viewModel(),
+    onRequestAcousticPermission: () -> Unit = {},
+    onRequestTorchPermission: () -> Unit = {}
 ) {
     val context = LocalContext.current
 
@@ -40,6 +42,17 @@ fun HomeGuardApp(
     val smokeAlarmDetectedAlert by viewModel.smokeAlarmDetectedAlert.collectAsState()
     val lastMotionAgoFormatted by viewModel.lastMotionAgoFormatted.collectAsState()
     val isAcousticListening by viewModel.isAcousticListening.collectAsState()
+    val isAcousticEnabled by viewModel.isAcousticEnabled.collectAsState()
+    val pendingSyncCount by viewModel.pendingSyncCount.collectAsState()
+
+    // Torch needs a runtime CAMERA grant; ask only when the user actually toggles it.
+    val onFlashlightClick = {
+        if (torchPermissionGranted(context)) {
+            viewModel.toggleFlashlight()
+        } else {
+            onRequestTorchPermission()
+        }
+    }
 
     // Handle system back navigation safely
     BackHandler(enabled = currentDestination != NavigationDestination.Home) {
@@ -77,7 +90,7 @@ fun HomeGuardApp(
                     onCheckInClick = { viewModel.confirmCheckIn() },
                     onEmergencyClick = { viewModel.startEmergencyCountdown() },
                     onCallPrimaryClick = { viewModel.initiateCallToPrimary(context) },
-                    onFlashlightClick = { viewModel.toggleFlashlight() },
+                    onFlashlightClick = onFlashlightClick,
                     onPingBeaconClick = { viewModel.pingCaregiverBeacon() },
                     onDismissFallAlert = { viewModel.dismissFallAlert() },
                     onDismissSmokeAlert = { viewModel.dismissSmokeAlert() },
@@ -96,6 +109,7 @@ fun HomeGuardApp(
             NavigationDestination.EmergencyActive -> {
                 EmergencyActiveScreen(
                     isInternetAvailable = connectivityInfo.isInternetAvailable,
+                    pendingSyncCount = pendingSyncCount,
                     onStopAlarmClick = { viewModel.stopAlarmAndResolve() }
                 )
             }
@@ -114,7 +128,7 @@ fun HomeGuardApp(
                     batteryInfo = batteryInfo,
                     isTorchOn = isTorchOn,
                     appConfig = appConfig,
-                    onToggleTorch = { viewModel.toggleFlashlight() },
+                    onToggleTorch = onFlashlightClick,
                     onCallPrimary = { viewModel.initiateCallToPrimary(context) },
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
@@ -143,6 +157,7 @@ fun HomeGuardApp(
                     lastCheckInFormatted = lastCheckInFormatted,
                     appConfig = appConfig,
                     recentEvents = recentEvents,
+                    pendingSyncCount = pendingSyncCount,
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
             }
@@ -151,7 +166,15 @@ fun HomeGuardApp(
                 SetupAndSettingsScreen(
                     currentConfig = appConfig,
                     isInitialSetup = false,
+                    isAcousticEnabled = isAcousticEnabled,
                     onSaveConfig = { updated -> viewModel.saveConfig(updated) },
+                    onToggleAcoustic = {
+                        if (isAcousticEnabled) {
+                            viewModel.setAcousticEnabled(false)
+                        } else {
+                            onRequestAcousticPermission()
+                        }
+                    },
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
             }
@@ -160,7 +183,15 @@ fun HomeGuardApp(
                 SetupAndSettingsScreen(
                     currentConfig = appConfig,
                     isInitialSetup = true,
+                    isAcousticEnabled = isAcousticEnabled,
                     onSaveConfig = { updated -> viewModel.saveConfig(updated) },
+                    onToggleAcoustic = {
+                        if (isAcousticEnabled) {
+                            viewModel.setAcousticEnabled(false)
+                        } else {
+                            onRequestAcousticPermission()
+                        }
+                    },
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
             }

@@ -7,7 +7,6 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -46,8 +45,9 @@ fun HomeGuardTheme(
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
-                window.statusBarColor = colorScheme.background.toArgb()
-                window.navigationBarColor = colorScheme.background.toArgb()
+                // statusBarColor / navigationBarColor are deprecated in API 35. Draw edge to edge
+                // instead; every screen already applies statusBarsPadding()/navigationBarsPadding().
+                WindowCompat.setDecorFitsSystemWindows(window, false)
                 WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
             }
         }

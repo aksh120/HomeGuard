@@ -118,8 +118,8 @@ fun EmergencyCountdownScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "CRITICAL OVERRIDE INITIATING",
-                        fontSize = 11.sp,
+                        text = stringResource(R.string.emergency_countdown_initiating),
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.5.sp,
                         color = StatusEmergency
@@ -206,8 +206,8 @@ fun EmergencyCountdownScreen(
                         color = Color.White
                     )
                     Text(
-                        text = "SECONDS",
-                        fontSize = 10.sp,
+                        text = stringResource(R.string.emergency_seconds_label),
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.sp,
                         color = StatusEmergency
@@ -222,7 +222,7 @@ fun EmergencyCountdownScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             CyberButton(
-                text = "ABORT EMERGENCY PROTOCOL",
+                text = stringResource(R.string.emergency_abort),
                 onClick = onCancelClick,
                 accentColor = Color(0xFFEF4444),
                 isSecondary = true,
@@ -230,7 +230,7 @@ fun EmergencyCountdownScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Tap to cancel broadcast and revert to Sentinel Standby",
+                text = stringResource(R.string.emergency_abort_hint),
                 fontSize = 12.sp,
                 color = Color(0xFF64748B),
                 textAlign = TextAlign.Center
@@ -243,6 +243,7 @@ fun EmergencyCountdownScreen(
 @Composable
 fun EmergencyActiveScreen(
     isInternetAvailable: Boolean,
+    pendingSyncCount: Int,
     onStopAlarmClick: () -> Unit
 ) {
     val transition = rememberInfiniteTransition(label = "pulse_active")
@@ -335,20 +336,34 @@ fun EmergencyActiveScreen(
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
-                        text = if (isInternetAvailable) "EMERGENCY SOS BROADCASTED" else "OFFLINE SOS ARMED",
-                        fontSize = 13.sp,
+                        text = if (isInternetAvailable) {
+                            stringResource(R.string.emergency_broadcasted)
+                        } else {
+                            stringResource(R.string.emergency_offline_armed)
+                        },
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
-                        text = if (isInternetAvailable)
-                            "Local siren active and cloud emergency dispatch triggered."
-                        else
-                            "Local siren sounding. Event queued safely and will sync immediately upon reconnection.",
-                        fontSize = 12.sp,
+                        text = if (isInternetAvailable) {
+                            stringResource(R.string.emergency_broadcasted_detail)
+                        } else {
+                            stringResource(R.string.emergency_offline_detail)
+                        },
+                        fontSize = 14.sp,
                         color = Color(0xFF94A3B8),
-                        lineHeight = 16.sp
+                        lineHeight = 19.sp
                     )
+                    if (!isInternetAvailable && pendingSyncCount > 0) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.sync_pending_count, pendingSyncCount),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StatusSafe
+                        )
+                    }
                 }
             }
         }
@@ -367,8 +382,8 @@ fun EmergencyActiveScreen(
             )
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "Silences high-decibel siren and resets Sentinel state to SAFE",
-                fontSize = 12.sp,
+                text = stringResource(R.string.emergency_resolve_caption),
+                fontSize = 13.sp,
                 color = Color(0xFF64748B),
                 textAlign = TextAlign.Center
             )

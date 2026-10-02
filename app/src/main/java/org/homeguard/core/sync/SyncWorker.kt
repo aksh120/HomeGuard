@@ -10,12 +10,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import android.util.Log
 import org.homeguard.HomeGuardApplication
-import org.homeguard.core.data.DefaultRemoteSyncDataSource
-import org.homeguard.core.data.EventRepository
-import org.homeguard.core.data.SupabaseRemoteSyncDataSource
-import org.homeguard.core.data.SyncRepository
-import org.homeguard.core.database.HomeGuardDatabase
+import org.homeguard.core.data.RemoteNotConfiguredException
 import java.util.concurrent.TimeUnit
 
 class SyncWorker(
@@ -24,13 +21,29 @@ class SyncWorker(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        return try {
-            val db = HomeGuardDatabase.getInstance(applicationContext)
-            val eventRepository = EventRepository(db.pendingEventDao(), db.eventAuditDao())
-            val syncRepository = SyncRepository(eventRepository, SupabaseRemoteSyncDataSource())
+        val container = (applicationContext as? HomeGuardApplication)?.container
+            ?: return Result.failure()
 
-            val result = syncRepository.syncPendingEvents()
+        return try {
+            // Heartbeat first so a monitoring contact can see the device is alive even when
+            // there is nothing queued.
+            val deviceId = container.preferencesManager.ensureDeviceId()
+            val battery = container.batteryMonitor.batteryInfo.value
+            val heartbeat = container.remoteSyncDataSource.sendHeartbeat(
+                deviceId = deviceId,
+                batteryLevel = battery.level,
+                isCharging = battery.isCharging
+            )
+            if (heartbeat.isFailure && heartbeat.exceptionOrNull() !is RemoteNotConfiguredException) {
+                Log.w("SyncWorker", "Heartbeat failed: ${heartbeat.exceptionOrNull()?.message}")
+            }
+
+            val result = container.syncRepository.syncPendingEvents()
+            val failure = result.exceptionOrNull()
             if (result.isSuccess) {
+                Result.success()
+            } else if (failure is RemoteNotConfiguredException) {
+                // Nothing to retry against; keep events queued and wait for configuration.
                 Result.success()
             } else {
                 Result.retry()

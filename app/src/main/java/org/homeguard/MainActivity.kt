@@ -20,24 +20,32 @@ class MainActivity : ComponentActivity() {
 
     private val homeViewModel: HomeViewModel by viewModels()
 
+    /**
+     * P0-6: the microphone is requested only in response to an explicit user action that turns on
+     * acoustic detection. It is deliberately not requested from onCreate or onResume.
+     */
     private val requestAudioPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            homeViewModel.retryAcousticDetector()
+            homeViewModel.onAcousticPermissionGranted()
+        } else {
+            homeViewModel.onAcousticPermissionDenied()
+        }
+    }
+
+    private val requestTorchPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            homeViewModel.toggleFlashlight()
+        } else {
+            homeViewModel.onTorchPermissionDenied()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
 
         setContent {
             HomeGuardTheme {
@@ -45,20 +53,28 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    HomeGuardApp(viewModel = homeViewModel)
+                    HomeGuardApp(
+                        viewModel = homeViewModel,
+                        onRequestAcousticPermission = {
+                            requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        },
+                        onRequestTorchPermission = {
+                            requestTorchPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    )
                 }
             }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        if (ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) == PackageManager.PERMISSION_GRANTED
+    /** Entry point for the acoustic-detection toggle in settings. */
+    fun requestAcousticDetection() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
         ) {
-            homeViewModel.retryAcousticDetector()
+            homeViewModel.onAcousticPermissionGranted()
+        } else {
+            requestAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 }

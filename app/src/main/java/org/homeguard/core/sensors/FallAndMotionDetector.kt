@@ -9,6 +9,8 @@ import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +34,7 @@ class FallAndMotionDetector(
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
 
-    private val scope = CoroutineScope(Dispatchers.Default)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     private val _telemetry = MutableStateFlow(MotionTelemetry())
     val telemetry: StateFlow<MotionTelemetry> = _telemetry.asStateFlow()
@@ -58,6 +60,8 @@ class FallAndMotionDetector(
     fun stop() {
         sensorManager?.unregisterListener(this)
         stillnessTimerJob?.cancel()
+        // Cancel the scope itself, not just its jobs, so the detector cannot outlive its owner.
+        scope.cancel()
         _telemetry.value = _telemetry.value.copy(isMonitoring = false)
     }
 

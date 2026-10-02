@@ -135,7 +135,7 @@ fun ProtectedHomeScreen(
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_launcher_foreground),
-                        contentDescription = "HomeGuard Sentinel",
+                        contentDescription = stringResource(R.string.a11y_app_logo),
                         modifier = Modifier.fillMaxSize()
                     )
                 }
@@ -143,7 +143,7 @@ fun ProtectedHomeScreen(
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "HOMEGUARD",
+                            text = stringResource(R.string.home_app_title),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 2.sp,
@@ -158,8 +158,8 @@ fun ProtectedHomeScreen(
                         )
                     }
                     Text(
-                        text = "SENTINEL ACTIVE • HOME",
-                        fontSize = 11.sp,
+                        text = stringResource(R.string.home_sentinel_active),
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
                         color = Color(0xFF10B981)
@@ -171,14 +171,14 @@ fun ProtectedHomeScreen(
                 IconButton(onClick = onPingBeaconClick) {
                     Icon(
                         imageVector = Icons.Default.NotificationsActive,
-                        contentDescription = "Ping Beacon",
+                        contentDescription = stringResource(R.string.a11y_ping_beacon),
                         tint = Color(0xFF94A3B8)
                     )
                 }
                 IconButton(onClick = { onNavigate(NavigationDestination.Settings) }) {
                     Icon(
                         imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
+                        contentDescription = stringResource(R.string.a11y_settings),
                         tint = Color(0xFF94A3B8)
                     )
                 }
@@ -215,8 +215,8 @@ fun ProtectedHomeScreen(
 
         // TACTICAL HARDWARE CONTROLS GRID
         Text(
-            text = "TACTICAL UTILITY COCKPIT",
-            fontSize = 11.sp,
+            text = stringResource(R.string.home_utility_cockpit),
+            fontSize = 13.sp,
             fontWeight = FontWeight.ExtraBold,
             letterSpacing = 1.sp,
             color = Color(0xFF64748B),
@@ -232,8 +232,8 @@ fun ProtectedHomeScreen(
             // Flashlight Tactile Tile
             CyberActionTile(
                 icon = Icons.Default.FlashOn,
-                title = "FLASHLIGHT",
-                status = if (isTorchOn) "ACTIVE" else "STANDBY",
+                title = stringResource(R.string.home_torch),
+                status = if (isTorchOn) stringResource(R.string.tile_active) else stringResource(R.string.tile_standby),
                 accentColor = if (isTorchOn) TorchActive else Color(0xFF64748B),
                 onClick = onFlashlightClick,
                 modifier = Modifier.weight(1f)
@@ -242,8 +242,8 @@ fun ProtectedHomeScreen(
             // Primary Contact Call Tile
             CyberActionTile(
                 icon = Icons.Default.Call,
-                title = "CALL PRIMARY",
-                status = appConfig.primaryContact.name.ifBlank { "DIRECT" },
+                title = stringResource(R.string.action_call_primary),
+                status = appConfig.primaryContact.name.ifBlank { stringResource(R.string.call_direct) },
                 accentColor = ActionPrimary,
                 onClick = onCallPrimaryClick,
                 modifier = Modifier.weight(1f)
@@ -259,8 +259,8 @@ fun ProtectedHomeScreen(
             // Night Mode Tile
             CyberActionTile(
                 icon = Icons.Default.Bedtime,
-                title = "NIGHT AEGIS",
-                status = "DARK HUD",
+                title = stringResource(R.string.home_night_aegis),
+                status = stringResource(R.string.tile_dark_hud),
                 accentColor = Color(0xFF818CF8),
                 onClick = { onNavigate(NavigationDestination.NightMode) },
                 modifier = Modifier.weight(1f)
@@ -269,8 +269,8 @@ fun ProtectedHomeScreen(
             // Power Cut Defense Tile
             CyberActionTile(
                 icon = Icons.Default.PowerOff,
-                title = "POWER OUTAGE",
-                status = "BATTERY GUARD",
+                title = stringResource(R.string.home_power_outage),
+                status = stringResource(R.string.tile_battery_guard),
                 accentColor = Color(0xFFFBBF24),
                 onClick = { onNavigate(NavigationDestination.PowerCut) },
                 modifier = Modifier.weight(1f)
@@ -286,8 +286,8 @@ fun ProtectedHomeScreen(
             // Emergency Info Dossier Tile
             CyberActionTile(
                 icon = Icons.Default.Info,
-                title = "SAFETY DOSSIER",
-                status = "OFFLINE VAULT",
+                title = stringResource(R.string.home_safety_dossier),
+                status = stringResource(R.string.tile_offline_vault),
                 accentColor = Color(0xFF2DD4BF),
                 onClick = { onNavigate(NavigationDestination.EmergencyInfo) },
                 modifier = Modifier.weight(1f)
@@ -296,8 +296,8 @@ fun ProtectedHomeScreen(
             // Fire Evacuation Guide Tile
             CyberActionTile(
                 icon = Icons.Default.LocalFireDepartment,
-                title = "FIRE EVACUATION",
-                status = "OFFLINE GUIDE",
+                title = stringResource(R.string.home_fire_evacuation),
+                status = stringResource(R.string.tile_offline_guide),
                 accentColor = Color(0xFFF87171),
                 onClick = { onNavigate(NavigationDestination.FireGuide) },
                 modifier = Modifier.weight(1f)
@@ -313,8 +313,8 @@ fun ProtectedHomeScreen(
             // Caregiver Radar Beacon Tile
             CyberActionTile(
                 icon = Icons.Default.NotificationsActive,
-                title = "RADAR BEACON",
-                status = "PING CHIRP",
+                title = stringResource(R.string.home_radar_beacon),
+                status = stringResource(R.string.tile_ping_chirp),
                 accentColor = Color(0xFF38BDF8),
                 onClick = onPingBeaconClick,
                 modifier = Modifier.weight(1f)
@@ -323,8 +323,8 @@ fun ProtectedHomeScreen(
             // Sentinel Audit Dashboard Tile
             CyberActionTile(
                 icon = Icons.Default.Check,
-                title = "SENTINEL AUDIT",
-                status = "EVENT STREAM",
+                title = stringResource(R.string.home_sentinel_audit),
+                status = stringResource(R.string.tile_event_stream),
                 accentColor = Color(0xFF10B981),
                 onClick = { onNavigate(NavigationDestination.MonitoringDashboard) },
                 modifier = Modifier.weight(1f)
@@ -342,12 +342,12 @@ fun ProtectedHomeScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = StatusEmergency)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Sudden Fall Impact Detected", fontWeight = FontWeight.Black, color = Color.White)
+                    Text(text = stringResource(R.string.fall_alert_title), fontWeight = FontWeight.Black, color = Color.White)
                 }
             },
             text = {
                 Text(
-                    text = "A sudden impact and stillness were detected on this device. Are you okay or do you need assistance?",
+                    text = stringResource(R.string.fall_alert_body),
                     fontSize = 16.sp,
                     color = TextPrimary
                 )
@@ -360,7 +360,7 @@ fun ProtectedHomeScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusSafe)
                 ) {
-                    Text(text = "I'M OK", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.fall_alert_confirm), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
@@ -371,7 +371,7 @@ fun ProtectedHomeScreen(
                     },
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusEmergency)
                 ) {
-                    Text(text = "SEND EMERGENCY SOS", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.fall_alert_sos), fontWeight = FontWeight.Bold)
                 }
             },
             containerColor = Color(0xFF140707)
@@ -386,12 +386,12 @@ fun ProtectedHomeScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(imageVector = Icons.Default.LocalFireDepartment, contentDescription = null, tint = StatusEmergency)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "Smoke Alarm Pattern Detected", fontWeight = FontWeight.Black, color = Color.White)
+                    Text(text = stringResource(R.string.smoke_alert_title), fontWeight = FontWeight.Black, color = Color.White)
                 }
             },
             text = {
                 Text(
-                    text = "The acoustic listener detected a high-pitch smoke alarm pattern (T3/T4) nearby. Please verify your safety immediately.",
+                    text = stringResource(R.string.smoke_alert_body),
                     fontSize = 16.sp,
                     color = TextPrimary
                 )
@@ -404,12 +404,12 @@ fun ProtectedHomeScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusEmergency)
                 ) {
-                    Text(text = "TRIGGER SOS ALARM", fontWeight = FontWeight.Bold)
+                    Text(text = stringResource(R.string.smoke_alert_sos), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = onDismissSmokeAlert) {
-                    Text(text = "I'M SAFE / FALSE ALARM", color = TextPrimary)
+                    Text(text = stringResource(R.string.smoke_alert_false), color = TextPrimary)
                 }
             },
             containerColor = Color(0xFF180A0A)

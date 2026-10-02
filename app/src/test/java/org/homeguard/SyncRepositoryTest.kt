@@ -2,105 +2,181 @@ package org.homeguard
 
 import kotlinx.coroutines.test.runTest
 import org.homeguard.core.data.EventRepository
+import org.homeguard.core.data.RemoteNotConfiguredException
 import org.homeguard.core.data.RemoteSyncDataSource
+import org.homeguard.core.data.SyncIncompleteException
 import org.homeguard.core.data.SyncRepository
+import org.homeguard.core.database.dao.PendingEventDao
 import org.homeguard.core.database.entity.PendingEventEntity
+import org.homeguard.core.model.EventSyncStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+/** Scriptable transport. Defaults to success; each test overrides with the failure it needs. */
 class FakeRemoteSyncDataSource : RemoteSyncDataSource {
-    var shouldFail = false
-    val receivedEvents = mutableListOf<PendingEventEntity>()
+    var behaviour: (PendingEventEntity) -> Result<Unit> = { Result.success(Unit) }
+    val sentIds = mutableListOf<String>()
 
     override suspend fun sendEvent(event: PendingEventEntity): Result<Unit> {
-        return if (shouldFail) {
-            Result.failure(Exception("Network offline or server timeout"))
-        } else {
-            receivedEvents.add(event)
-            Result.success(Unit)
-        }
+        sentIds += event.id
+        return behaviour(event)
     }
 
     override suspend fun sendHeartbeat(
         deviceId: String,
         batteryLevel: Int,
         isCharging: Boolean
-    ): Result<Unit> {
-        return if (shouldFail) Result.failure(Exception("Offline")) else Result.success(Unit)
-    }
+    ): Result<Unit> = Result.success(Unit)
 }
 
 class SyncRepositoryTest {
 
-    private lateinit var fakePendingDao: FakePendingEventDao
-    private lateinit var fakeAuditDao: FakeEventAuditDao
+    private lateinit var pendingDao: FakePendingEventDao
+    private lateinit var auditDao: FakeEventAuditDao
     private lateinit var eventRepository: EventRepository
-    private lateinit var fakeRemoteSource: FakeRemoteSyncDataSource
+    private lateinit var remote: FakeRemoteSyncDataSource
     private lateinit var syncRepository: SyncRepository
 
     @Before
     fun setUp() {
-        fakePendingDao = FakePendingEventDao()
-        fakeAuditDao = FakeEventAuditDao()
-        eventRepository = EventRepository(fakePendingDao, fakeAuditDao)
-        fakeRemoteSource = FakeRemoteSyncDataSource()
-        syncRepository = SyncRepository(eventRepository, fakeRemoteSource)
+        pendingDao = FakePendingEventDao()
+        auditDao = FakeEventAuditDao()
+        eventRepository = EventRepository(pendingDao, auditDao)
+        remote = FakeRemoteSyncDataSource()
+        syncRepository = SyncRepository(eventRepository, remote)
     }
 
     @Test
-    fun `test sync succeeds and clears pending queue when online`() = runTest {
-        eventRepository.enqueueEmergencySos("dev-1", "SOS 1")
-        eventRepository.enqueueCheckIn("dev-1")
-
-        assertEquals(2, eventRepository.getPendingEvents().size)
+    fun `successful sync drains the queue`() = runTest {
+        eventRepository.enqueueCheckIn("device-1")
+        eventRepository.enqueueCheckIn("device-1")
 
         val result = syncRepository.syncPendingEvents()
-        assertTrue(result.isSuccess)
-        assertEquals(2, result.getOrNull())
 
-        // Verified queue is drained
-        assertEquals(0, eventRepository.getPendingEvents().size)
-        assertEquals(2, fakeRemoteSource.receivedEvents.size)
+        assertTrue(result.isSuccess)
+        assertEquals(2, result.getOrThrow())
+        assertTrue(pendingDao.events.isEmpty())
+        // Audit history is retained even after delivery.
+        assertEquals(2, auditDao.audits.size)
     }
 
     @Test
-    fun `test sync fails gracefully and preserves events in queue when offline`() = runTest {
-        eventRepository.enqueueEmergencySos("dev-1", "SOS offline")
-        fakeRemoteSource.shouldFail = true
+    fun `nothing queued reports success with zero synced`() = runTest {
+        val result = syncRepository.syncPendingEvents()
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.getOrThrow())
+        assertTrue(remote.sentIds.isEmpty())
+    }
+
+    /**
+     * P0-2: a transport failure must not be reported as a completed sync, or WorkManager never
+     * asks for a retry and the event is silently abandoned.
+     */
+    @Test
+    fun `transport failure surfaces as SyncIncompleteException`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(IllegalStateException("network down")) }
 
         val result = syncRepository.syncPendingEvents()
-        assertTrue(result.isSuccess)
-        assertEquals(0, result.getOrNull())
 
-        // Event remains in pending queue with incremented retry count
-        val pending = eventRepository.getPendingEvents()
-        assertEquals(0, pending.size) // Marked failed in pending dao
-        assertEquals(1, fakePendingDao.events.size)
-        assertEquals(1, fakePendingDao.events.values.first().retryCount)
+        assertFalse(result.isSuccess)
+        val failure = result.exceptionOrNull()
+        assertTrue(failure is SyncIncompleteException)
+        assertEquals(1, (failure as SyncIncompleteException).failedCount)
+
+        // The event must still exist, marked FAILED, so a later pass can pick it up.
+        val stored = pendingDao.events[eventId]
+        assertNotNull(stored)
+        assertEquals(EventSyncStatus.FAILED.name, stored!!.syncStatus)
+        assertEquals(1, stored.retryCount)
     }
 
     @Test
-    fun `test duplicate event prevention with idempotent IDs`() = runTest {
-        val eventId = "fixed-uuid-1234"
-        val entity1 = PendingEventEntity(
-            id = eventId,
-            eventType = "EMERGENCY_SOS",
-            timestamp = 1000L,
-            payloadJson = "{}"
-        )
-        val entity2 = PendingEventEntity(
-            id = eventId,
-            eventType = "EMERGENCY_SOS",
-            timestamp = 1001L,
-            payloadJson = "{}"
-        )
+    fun `failed event is picked up again on the next pass and delivered`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(IllegalStateException("transient")) }
 
-        fakePendingDao.insert(entity1)
-        val insertResult2 = fakePendingDao.insert(entity2)
+        syncRepository.syncPendingEvents()
+        assertEquals(EventSyncStatus.FAILED.name, pendingDao.events[eventId]?.syncStatus)
 
-        assertEquals(-1L, insertResult2) // Duplicate rejected
-        assertEquals(1, fakePendingDao.events.size)
+        // Network recovers.
+        remote.behaviour = { Result.success(Unit) }
+        val second = syncRepository.syncPendingEvents()
+
+        assertTrue(second.isSuccess)
+        assertEquals(1, second.getOrThrow())
+        assertTrue(pendingDao.events.isEmpty())
+        assertEquals(listOf(eventId, eventId), remote.sentIds)
+    }
+
+    @Test
+    fun `partial failure reports failure while still delivering the rest`() = runTest {
+        val good = eventRepository.enqueueCheckIn("device-1")
+        val bad = eventRepository.enqueueCheckIn("device-1")
+        remote.behaviour = { event ->
+            if (event.id == bad) Result.failure(IllegalStateException("rejected"))
+            else Result.success(Unit)
+        }
+
+        val result = syncRepository.syncPendingEvents()
+
+        assertFalse(result.isSuccess)
+        assertFalse(pendingDao.events.containsKey(good))
+        assertTrue(pendingDao.events.containsKey(bad))
+        assertEquals(1, (result.exceptionOrNull() as SyncIncompleteException).failedCount)
+    }
+
+    /**
+     * P0-3: blank credentials previously returned success, which made markEventSynced delete the
+     * row. An unconfigured build must leave events queued.
+     */
+    @Test
+    fun `unconfigured remote keeps events queued and does not report success`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(RemoteNotConfiguredException()) }
+
+        val result = syncRepository.syncPendingEvents()
+
+        assertFalse(result.isSuccess)
+        assertTrue(result.exceptionOrNull() is RemoteNotConfiguredException)
+        assertTrue(pendingDao.events.containsKey(eventId))
+        // Retry count must not advance just because nothing is configured.
+        assertEquals(0, pendingDao.events[eventId]?.retryCount)
+    }
+
+    @Test
+    fun `event is abandoned only after exhausting retries`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(IllegalStateException("permanent")) }
+
+        repeat(PendingEventDao.MAX_RETRIES) {
+            syncRepository.syncPendingEvents()
+        }
+
+        // Further passes no longer select it.
+        remote.sentIds.clear()
+        syncRepository.syncPendingEvents()
+
+        assertTrue(remote.sentIds.isEmpty())
+        assertEquals(
+            PendingEventDao.MAX_RETRIES,
+            pendingDao.events[eventId]?.retryCount
+        )
+    }
+
+    @Test
+    fun `duplicate event id is not delivered twice within a pass`() = runTest {
+        val eventId = eventRepository.enqueueCheckIn("device-1")
+        val clone = pendingDao.events.getValue(eventId).copy()
+        pendingDao.insert(clone)
+
+        syncRepository.syncPendingEvents()
+
+        assertEquals(listOf(eventId), remote.sentIds)
     }
 }

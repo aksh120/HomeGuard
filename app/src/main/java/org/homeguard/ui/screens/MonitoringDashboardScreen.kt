@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
@@ -41,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.homeguard.R
 import org.homeguard.core.database.entity.EventAuditEntity
+import org.homeguard.core.database.entity.localizedSummaryText
 import org.homeguard.core.designsystem.theme.StatusEmergency
 import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.designsystem.theme.StatusUnknown
@@ -63,6 +65,7 @@ fun MonitoringDashboardScreen(
     lastCheckInFormatted: String,
     appConfig: AppConfig,
     recentEvents: List<EventAuditEntity>,
+    pendingSyncCount: Int,
     onBackClick: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -84,14 +87,18 @@ fun MonitoringDashboardScreen(
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = "SENTINEL AUDIT",
-            subtitle = "LIVE TELEMETRY STREAM",
+            title = stringResource(R.string.dashboard_sentinel_audit),
+            subtitle = stringResource(R.string.dashboard_live_stream),
             onBackClick = onBackClick
         )
 
         // Monitored Person Sentinel Dossier Card
-        val personName = appConfig.personName.ifBlank { "Protected Person" }
-        val personRole = appConfig.personRole.ifBlank { "Resident" }
+        val personName = appConfig.personName.ifBlank {
+            stringResource(R.string.dashboard_protected_person)
+        }
+        val personRole = appConfig.personRole.ifBlank {
+            stringResource(R.string.dashboard_default_role)
+        }
 
         CyberGlassCard {
             Row(
@@ -124,8 +131,8 @@ fun MonitoringDashboardScreen(
                             color = Color.White
                         )
                         Text(
-                            text = "ROLE: ${personRole.uppercase()}",
-                            fontSize = 11.sp,
+                            text = stringResource(R.string.dashboard_role, personRole),
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF64748B),
                             letterSpacing = 0.5.sp
@@ -134,9 +141,9 @@ fun MonitoringDashboardScreen(
                 }
 
                 val (statusText, statusColor) = when (safetyStatus) {
-                    SafetyStatus.SAFE -> "SAFE" to StatusSafe
-                    SafetyStatus.UNKNOWN -> "PENDING" to StatusUnknown
-                    SafetyStatus.EMERGENCY -> "ALERT" to StatusEmergency
+                    SafetyStatus.SAFE -> stringResource(R.string.dashboard_safe) to StatusSafe
+                    SafetyStatus.UNKNOWN -> stringResource(R.string.dashboard_pending) to StatusUnknown
+                    SafetyStatus.EMERGENCY -> stringResource(R.string.dashboard_alert) to StatusEmergency
                 }
                 CyberBadge(text = statusText, color = statusColor)
             }
@@ -146,8 +153,8 @@ fun MonitoringDashboardScreen(
 
         // Device Telemetry Array Cards
         Text(
-            text = "HARDWARE & MESH TELEMETRY",
-            fontSize = 11.sp,
+            text = stringResource(R.string.dashboard_hardware_telemetry),
+            fontSize = 13.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 1.sp,
             color = Color(0xFF64748B),
@@ -159,18 +166,30 @@ fun MonitoringDashboardScreen(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             AuditTelemetryTile(
-                title = "NETWORK",
-                value = if (connectivityInfo.isInternetAvailable) "Online" else "Local Mesh",
-                sub = if (connectivityInfo.isWifiConnected) "Wi-Fi Connected" else "Cellular/Offline",
+                title = stringResource(R.string.common_network),
+                value = if (connectivityInfo.isInternetAvailable) {
+                    stringResource(R.string.dashboard_online)
+                } else {
+                    stringResource(R.string.dashboard_offline)
+                },
+                sub = if (connectivityInfo.isWifiConnected) {
+                    stringResource(R.string.wifi_connected)
+                } else {
+                    stringResource(R.string.dashboard_cellular)
+                },
                 color = if (connectivityInfo.isInternetAvailable) Color(0xFF38BDF8) else StatusUnknown,
                 icon = Icons.Default.Wifi,
                 modifier = Modifier.weight(1f)
             )
 
             AuditTelemetryTile(
-                title = "BATTERY",
-                value = "${batteryInfo.level}%",
-                sub = if (batteryInfo.isCharging) "Charging" else "Unplugged",
+                title = stringResource(R.string.common_battery),
+                value = stringResource(R.string.battery_percent, batteryInfo.level),
+                sub = if (batteryInfo.isCharging) {
+                    stringResource(R.string.battery_charging)
+                } else {
+                    stringResource(R.string.battery_unplugged)
+                },
                 color = if (batteryInfo.level <= 20) StatusEmergency else StatusSafe,
                 icon = Icons.Default.Bolt,
                 modifier = Modifier.weight(1f)
@@ -180,20 +199,33 @@ fun MonitoringDashboardScreen(
         Spacer(modifier = Modifier.height(10.dp))
 
         AuditTelemetryTile(
-            title = "LAST VERIFIED SAFETY CHECK-IN",
+            title = stringResource(R.string.dashboard_last_checkin),
             value = lastCheckInFormatted,
-            sub = "Synchronized with local encrypted SQLite Room log",
+            sub = stringResource(R.string.dashboard_local_log),
             color = Color(0xFF10B981),
             icon = Icons.Default.Sensors,
             modifier = Modifier.fillMaxWidth()
         )
 
+        // Surfaces the offline queue so a user can see events that have not reached the backend.
+        if (pendingSyncCount > 0) {
+            Spacer(modifier = Modifier.height(10.dp))
+            AuditTelemetryTile(
+                title = stringResource(R.string.dashboard_pending_sync),
+                value = pendingSyncCount.toString(),
+                sub = stringResource(R.string.dashboard_pending_sync_detail),
+                color = StatusUnknown,
+                icon = Icons.Default.CloudQueue,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Recent Audit Events Timeline
         Text(
-            text = "IMMUTABLE AUDIT TRAIL",
-            fontSize = 11.sp,
+            text = stringResource(R.string.dashboard_audit_trail),
+            fontSize = 13.sp,
             fontWeight = FontWeight.Black,
             letterSpacing = 1.sp,
             color = Color(0xFF64748B),
@@ -203,9 +235,9 @@ fun MonitoringDashboardScreen(
         if (recentEvents.isEmpty()) {
             CyberGlassCard {
                 Text(
-                    text = "No recorded safety events in local storage. All systems nominal.",
+                    text = stringResource(R.string.dashboard_empty_events),
                     color = Color(0xFF64748B),
-                    fontSize = 13.sp
+                    fontSize = 14.sp
                 )
             }
         } else {
@@ -242,7 +274,7 @@ private fun AuditTelemetryTile(
             ) {
                 Text(
                     text = title,
-                    fontSize = 10.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
                     color = Color(0xFF94A3B8)
@@ -263,7 +295,7 @@ private fun AuditTelemetryTile(
             )
             Text(
                 text = sub,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 color = Color(0xFF64748B)
             )
         }
@@ -301,14 +333,14 @@ private fun CyberEventRow(event: EventAuditEntity) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = event.summary,
+                        text = event.localizedSummaryText(),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isAlert) StatusEmergency else Color.White
                     )
                     Text(
                         text = formattedTime,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Medium,
                         color = Color(0xFF64748B)
                     )

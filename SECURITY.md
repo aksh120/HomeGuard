@@ -19,6 +19,7 @@ Instead:
 
 ## Security Practices in HomeGuard
 - **No Hardcoded Secrets**: Secrets and API keys must never be committed.
-- **Minimal Android Permissions**: HomeGuard requests only strictly needed permissions (e.g. Flashlight torch, Post Notifications). It explicitly avoids location, contacts reading, SMS, or microphone permissions.
-- **Row-Level Security**: Remote database connections enforce user isolation via PostgreSQL RLS policies.
+- **Minimal Android Permissions**: HomeGuard requests only what it needs. `CAMERA` (torch flash), `RECORD_AUDIO` (optional acoustic smoke-alarm detection), and `POST_NOTIFICATIONS`. It explicitly avoids location, contacts, and SMS permissions. Both the microphone and the camera are **opt-in**: neither permission is requested at launch or on resume — only when the user turns on the corresponding feature.
+- **Row-Level Security**: Every remote table is owned by an `auth.users` row, and every policy is scoped with `auth.uid() = user_id`. Each install bootstraps its own Supabase anonymous session, so one device can never read or write another device's records, even with the public anon key.
+- **No location tracking**: The app requests no location permission of any kind and contains no location code.
 - **Local Data Protection**: Critical settings and event queues reside in app-private sandboxed storage.

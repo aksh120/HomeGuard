@@ -86,15 +86,15 @@ fun NightModeScreen(
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
-                        text = "NIGHT AEGIS",
+                        text = stringResource(R.string.night_aegis_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.5.sp,
                         color = Color.White
                     )
                     Text(
-                        text = "LOW-EMISSION HUD",
-                        fontSize = 10.sp,
+                        text = stringResource(R.string.night_low_emission),
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
                         color = Color(0xFF818CF8)
@@ -114,14 +114,14 @@ fun NightModeScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Exit Night Mode",
+                        contentDescription = stringResource(R.string.a11y_exit_night_mode),
                         tint = Color(0xFF94A3B8),
                         modifier = Modifier.size(14.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "EXIT",
-                        fontSize = 12.sp,
+                        text = stringResource(R.string.night_exit),
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF94A3B8)
                     )
@@ -152,7 +152,7 @@ fun NightModeScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Vigilance Mode Active",
+                text = stringResource(R.string.night_vigilance_active),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color.White
@@ -161,8 +161,8 @@ fun NightModeScreen(
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Sensors & acoustic ear active with minimal screen emission",
-                fontSize = 13.sp,
+                text = stringResource(R.string.night_vigilance_desc),
+                fontSize = 14.sp,
                 color = Color(0xFF64748B)
             )
 
@@ -171,11 +171,15 @@ fun NightModeScreen(
             // Telemetry Badges
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 CyberBadge(
-                    text = "${batteryInfo.level}% Battery",
+                    text = stringResource(R.string.battery_status_format, batteryInfo.level),
                     color = if (batteryInfo.level <= 20) StatusEmergency else StatusSafe
                 )
                 CyberBadge(
-                    text = if (connectivityInfo.isWifiConnected) "Wi-Fi Guard" else "Local Mesh",
+                    text = if (connectivityInfo.isWifiConnected) {
+                        stringResource(R.string.wifi_connected)
+                    } else {
+                        stringResource(R.string.dashboard_offline)
+                    },
                     color = if (connectivityInfo.isWifiConnected) Color(0xFF38BDF8) else StatusUnknown
                 )
             }
@@ -183,7 +187,7 @@ fun NightModeScreen(
 
         // Direct SOS Trigger (Always Accessible)
         CyberButton(
-            text = "TRIGGER EMERGENCY SOS",
+            text = stringResource(R.string.night_trigger_sos),
             onClick = onEmergencyClick,
             accentColor = ActionEmergency,
             icon = Icons.Default.Warning,
@@ -220,8 +224,8 @@ fun PowerCutScreen(
             .padding(20.dp)
     ) {
         CyberTopAppBar(
-            title = "POWER OUTAGE",
-            subtitle = "BATTERY GUARD ACTIVE",
+            title = stringResource(R.string.power_outage_title),
+            subtitle = stringResource(R.string.power_battery_guard),
             onBackClick = onBackClick
         )
 
@@ -246,7 +250,7 @@ fun PowerCutScreen(
             ) {
                 Column {
                     Text(
-                        text = "TACTICAL TORCH",
+                        text = stringResource(R.string.power_tactical_torch),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 1.sp,
@@ -254,8 +258,12 @@ fun PowerCutScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (isTorchOn) "FLASHLIGHT ACTIVE • TAP TO EXTINGUISH" else "STANDBY • TAP TO ILLUMINATE",
-                        fontSize = 12.sp,
+                        text = if (isTorchOn) {
+                            stringResource(R.string.torch_active_hint)
+                        } else {
+                            stringResource(R.string.torch_standby_hint)
+                        },
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = if (isTorchOn) Color(0xFFFBBF24) else Color(0xFF64748B)
                     )
@@ -288,22 +296,26 @@ fun PowerCutScreen(
             ) {
                 Column {
                     Text(
-                        text = "BATTERY TELEMETRY",
-                        fontSize = 12.sp,
+                        text = stringResource(R.string.power_battery_telemetry),
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
                         color = Color(0xFF64748B)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "${batteryInfo.level}% RESERVED",
+                        text = stringResource(R.string.power_reserved, batteryInfo.level),
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Black,
                         color = if (batteryInfo.level <= 20) StatusEmergency else Color.White
                     )
                 }
                 CyberBadge(
-                    text = if (batteryInfo.isCharging) "CHARGING" else "ON BATTERY",
+                    text = if (batteryInfo.isCharging) {
+                        stringResource(R.string.battery_charging)
+                    } else {
+                        stringResource(R.string.power_on_battery)
+                    },
                     color = if (batteryInfo.isCharging) StatusSafe else Color(0xFFF59E0B)
                 )
             }
@@ -314,7 +326,7 @@ fun PowerCutScreen(
         // Quick Call Primary Contact
         if (appConfig.primaryContact.name.isNotBlank()) {
             CyberButton(
-                text = "CALL ${appConfig.primaryContact.name.uppercase()}",
+                text = stringResource(R.string.power_call_contact, appConfig.primaryContact.name),
                 onClick = onCallPrimary,
                 accentColor = Color(0xFF38BDF8),
                 icon = Icons.Default.Call,
@@ -334,8 +346,8 @@ fun PowerCutScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "OUTAGE PROTOCOL & CONSERVATION",
-                    fontSize = 12.sp,
+                    text = stringResource(R.string.power_outage_protocol),
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 1.sp,
                     color = Color.White
@@ -343,11 +355,8 @@ fun PowerCutScreen(
             }
             Spacer(modifier = Modifier.height(12.dp))
             Text(
-                text = "• Keep refrigerator/freezer sealed to preserve perishables.\n" +
-                        "• Unplug sensitive high-draw electronics to prevent power surge damage.\n" +
-                        "• Use device torch sparingly to maximize emergency battery reserve.\n" +
-                        "• HomeGuard offline sensors remain active without Wi-Fi.",
-                fontSize = 13.sp,
+                text = stringResource(R.string.power_outage_tips),
+                fontSize = 14.sp,
                 color = Color(0xFF94A3B8),
                 lineHeight = 22.sp
             )

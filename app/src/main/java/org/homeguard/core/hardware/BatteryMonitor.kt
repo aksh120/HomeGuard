@@ -16,6 +16,21 @@ data class BatteryInfo(
     val isCritical: Boolean = false
 )
 
+/**
+ * Battery thresholds, extracted so they can be tested without constructing an Intent.
+ * Critical is checked first: a device at 5% is both low and critical, and must report critical.
+ */
+fun evaluateBatteryState(percentage: Int, isCharging: Boolean): BatteryInfo {
+    val isCritical = percentage <= 10
+    val isLow = percentage in 11..20
+    return BatteryInfo(
+        level = percentage,
+        isCharging = isCharging,
+        isLow = isLow,
+        isCritical = isCritical
+    )
+}
+
 class BatteryMonitor(private val context: Context) {
 
     private val _batteryInfo = MutableStateFlow(BatteryInfo())
@@ -47,15 +62,7 @@ class BatteryMonitor(private val context: Context) {
         val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                 status == BatteryManager.BATTERY_STATUS_FULL
 
-        val isCritical = percentage <= 10
-        val isLow = percentage in 11..20
-
-        _batteryInfo.value = BatteryInfo(
-            level = percentage,
-            isCharging = isCharging,
-            isLow = isLow,
-            isCritical = isCritical
-        )
+        _batteryInfo.value = evaluateBatteryState(percentage, isCharging)
     }
 
     fun unregister() {

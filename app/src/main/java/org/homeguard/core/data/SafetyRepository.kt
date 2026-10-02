@@ -6,6 +6,26 @@ import org.homeguard.core.datastore.PreferencesManager
 import org.homeguard.core.model.SafetyStatus
 import java.util.concurrent.TimeUnit
 
+/**
+ * Pure safety state machine, extracted so it can be tested without a Context.
+ *
+ * Precedence is deliberate: an explicit EMERGENCY always wins, a never-checked-in device is
+ * UNKNOWN rather than SAFE, and an elapsed check-in window downgrades to UNKNOWN.
+ */
+fun calculateSafetyStatus(
+    stored: SafetyStatus,
+    lastCheckIn: Long?,
+    intervalHours: Int,
+    graceMinutes: Int,
+    now: Long = System.currentTimeMillis()
+): SafetyStatus = when {
+    stored == SafetyStatus.EMERGENCY -> SafetyStatus.EMERGENCY
+    lastCheckIn == null -> SafetyStatus.UNKNOWN
+    now - lastCheckIn > TimeUnit.HOURS.toMillis(intervalHours.toLong()) +
+        TimeUnit.MINUTES.toMillis(graceMinutes.toLong()) -> SafetyStatus.UNKNOWN
+    else -> SafetyStatus.SAFE
+}
+
 class SafetyRepository(
     private val preferencesManager: PreferencesManager,
     private val eventRepository: EventRepository
@@ -16,26 +36,12 @@ class SafetyRepository(
         preferencesManager.lastCheckInTimestampFlow,
         preferencesManager.appConfigFlow
     ) { status, lastCheckIn, config ->
-        // If an explicit active emergency exists, keep EMERGENCY
-        if (status == SafetyStatus.EMERGENCY) {
-            return@combine SafetyStatus.EMERGENCY
-        }
-
-        // If no check-in has ever been recorded, status is UNKNOWN
-        if (lastCheckIn == null) {
-            return@combine SafetyStatus.UNKNOWN
-        }
-
-        // Check if the scheduled check-in window has elapsed
-        val maxDurationMillis = TimeUnit.HOURS.toMillis(config.checkInIntervalHours.toLong()) +
-                TimeUnit.MINUTES.toMillis(config.checkInGracePeriodMinutes.toLong())
-        val isExpired = (System.currentTimeMillis() - lastCheckIn) > maxDurationMillis
-
-        if (isExpired) {
-            SafetyStatus.UNKNOWN
-        } else {
-            SafetyStatus.SAFE
-        }
+        calculateSafetyStatus(
+            stored = status,
+            lastCheckIn = lastCheckIn,
+            intervalHours = config.checkInIntervalHours,
+            graceMinutes = config.checkInGracePeriodMinutes
+        )
     }
 
     val lastCheckInTimestampFlow: Flow<Long?> = preferencesManager.lastCheckInTimestampFlow
@@ -51,7 +57,18 @@ class SafetyRepository(
         return eventRepository.enqueueEmergencySos(deviceId, details)
     }
 
-    suspend fun resolveEmergency() {
-        preferencesManager.setSafetyStatus(SafetyStatus.UNKNOWN)
+    /**
+     * Resolving an emergency records a deliberate check-in rather than assuming SAFE. Previously
+     * this set UNKNOWN while the UI claimed the device was returned to a known-safe state.
+     */
+    suspend fun resolveEmergency(deviceId: String) {
+        preferencesManager.recordCheckIn(System.currentTimeMillis())
+        preferencesManager.setSafetyStatus(SafetyStatus.SAFE)
+        eventRepository.recordAudit(
+            eventType = org.homeguard.core.model.EventType.CHECK_IN,
+            summary = org.homeguard.core.database.entity.EventSummaries.EMERGENCY_RESOLVED,
+            details = "Alarm stopped and safety confirmed by the resident"
+        )
+        eventRepository.enqueueCheckIn(deviceId)
     }
 }

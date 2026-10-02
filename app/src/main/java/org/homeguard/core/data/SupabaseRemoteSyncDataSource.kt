@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import org.homeguard.BuildConfig
 import org.homeguard.core.database.entity.PendingEventEntity
 import org.homeguard.core.model.EventType
+import org.homeguard.core.model.SafetyStatus
 import org.json.JSONObject
 import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
@@ -17,22 +18,29 @@ import java.util.TimeZone
 
 class SupabaseRemoteSyncDataSource(
     private val supabaseUrl: String = BuildConfig.SUPABASE_URL,
-    private val anonKey: String = BuildConfig.SUPABASE_ANON_KEY
+    private val anonKey: String = BuildConfig.SUPABASE_ANON_KEY,
+    private val authClient: SupabaseAuthClient = SupabaseAuthClient(supabaseUrl, anonKey)
 ) : RemoteSyncDataSource {
 
+    val isConfigured: Boolean get() = authClient.isConfigured()
+
     override suspend fun sendEvent(event: PendingEventEntity): Result<Unit> = withContext(Dispatchers.IO) {
-        if (supabaseUrl.isBlank() || anonKey.isBlank()) {
-            Log.i("SupabaseSync", "Supabase credentials not configured. Operating in local mock mode.")
-            return@withContext Result.success(Unit)
+        if (!isConfigured) {
+            Log.w("SupabaseSync", "Supabase credentials not configured; keeping event queued.")
+            return@withContext Result.failure(RemoteNotConfiguredException())
         }
 
         try {
             val jsonPayload = try {
                 JSONObject(event.payloadJson)
             } catch (e: Exception) {
-                JSONObject()
+                Log.e("SupabaseSync", "Corrupt payload for event ${event.id}", e)
+                return@withContext Result.failure(e)
             }
-            val deviceId = jsonPayload.optString("deviceId", "unknown_device")
+            val deviceId = jsonPayload.optString("deviceId", "").ifBlank {
+                Log.e("SupabaseSync", "Event ${event.id} has no deviceId; cannot deliver.")
+                return@withContext Result.failure(IllegalStateException("Missing deviceId"))
+            }
             val isoDate = formatIso8601(event.timestamp)
 
             val (endpoint, requestBody) = when (event.eventType) {
@@ -72,8 +80,8 @@ class SupabaseRemoteSyncDataSource(
         batteryLevel: Int,
         isCharging: Boolean
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        if (supabaseUrl.isBlank() || anonKey.isBlank()) {
-            return@withContext Result.success(Unit)
+        if (!isConfigured) {
+            return@withContext Result.failure(RemoteNotConfiguredException())
         }
 
         try {
@@ -82,6 +90,10 @@ class SupabaseRemoteSyncDataSource(
                 put("battery_level", batteryLevel)
                 put("is_charging", isCharging)
                 put("last_seen_at", formatIso8601(System.currentTimeMillis()))
+                // Columns are NOT NULL in the schema; an insert missing them would be rejected.
+                put("is_wifi_connected", true)
+                put("is_internet_available", true)
+                put("safety_status", SafetyStatus.UNKNOWN.name)
             }
             postToSupabase("device_status", body.toString())
             Result.success(Unit)
@@ -96,8 +108,8 @@ class SupabaseRemoteSyncDataSource(
         personName: String,
         personRole: String
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        if (supabaseUrl.isBlank() || anonKey.isBlank()) {
-            return@withContext Result.success(Unit)
+        if (!isConfigured) {
+            return@withContext Result.failure(RemoteNotConfiguredException())
         }
 
         try {
@@ -107,6 +119,7 @@ class SupabaseRemoteSyncDataSource(
                 put("person_name", personName)
                 put("person_role", personRole)
             }
+            // merge-duplicates keeps this idempotent across repeated launches.
             postToSupabase("devices", body.toString())
             Result.success(Unit)
         } catch (e: Exception) {
@@ -114,14 +127,18 @@ class SupabaseRemoteSyncDataSource(
         }
     }
 
-    private fun postToSupabase(table: String, jsonBody: String) {
+    private suspend fun postToSupabase(table: String, jsonBody: String) {
+        // RLS is scoped to auth.uid(), so an unauthenticated request would be rejected outright.
+        val token = authClient.accessToken()
+            ?: throw RemoteNotConfiguredException()
+
         val cleanUrl = supabaseUrl.trimEnd('/')
         val url = URL("$cleanUrl/rest/v1/$table")
         val conn = url.openConnection() as HttpURLConnection
         try {
             conn.requestMethod = "POST"
             conn.setRequestProperty("apikey", anonKey)
-            conn.setRequestProperty("Authorization", "Bearer $anonKey")
+            conn.setRequestProperty("Authorization", "Bearer $token")
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Prefer", "resolution=merge-duplicates")
             conn.connectTimeout = 10000
@@ -134,6 +151,11 @@ class SupabaseRemoteSyncDataSource(
             }
 
             val responseCode = conn.responseCode
+            if (responseCode == 401 || responseCode == 403) {
+                // Token rejected: drop it so the next attempt re-authenticates.
+                authClient.invalidate()
+                throw IllegalStateException("Supabase rejected the session (HTTP $responseCode)")
+            }
             if (responseCode !in 200..299) {
                 val errorStream = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                 throw IllegalStateException("Supabase returned HTTP $responseCode: $errorStream")

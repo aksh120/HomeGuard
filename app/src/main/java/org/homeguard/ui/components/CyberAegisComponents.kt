@@ -1,5 +1,6 @@
 package org.homeguard.ui.components
 
+import android.os.SystemClock
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -10,6 +11,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,7 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,13 +67,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.homeguard.R
 import org.homeguard.core.designsystem.theme.ActionEmergency
 import org.homeguard.core.designsystem.theme.BorderSubtle
@@ -80,6 +89,9 @@ import org.homeguard.core.designsystem.theme.StatusUnknown
 import org.homeguard.core.designsystem.theme.TextPrimary
 import org.homeguard.core.designsystem.theme.TextSecondary
 import org.homeguard.core.model.SafetyStatus
+
+/** Continuous press required before the SOS triggers. */
+private const val HOLD_SOS_DURATION_MS = 2500L
 
 /**
  * Hero Sentinel Aegis Orb with breathing glow and radar orbit ticks.
@@ -119,22 +131,28 @@ fun CyberAegisHeroOrb(
         SafetyStatus.SAFE -> Quadruple(
             Color(0xFF10B981),
             Color(0xFF062E22),
-            "SAFE",
+            stringResource(R.string.status_safe),
             Icons.Default.Check
         )
         SafetyStatus.UNKNOWN -> Quadruple(
             Color(0xFFF59E0B),
             Color(0xFF381A05),
-            "UNKNOWN",
+            stringResource(R.string.status_unknown),
             Icons.AutoMirrored.Filled.Help
         )
         SafetyStatus.EMERGENCY -> Quadruple(
             Color(0xFFEF4444),
             Color(0xFF3B0B0B),
-            "EMERGENCY",
+            stringResource(R.string.status_emergency),
             Icons.Default.Warning
         )
     }
+
+    val orbA11yDescription = stringResource(
+        R.string.orb_button_a11y,
+        stringResource(R.string.action_im_ok),
+        statusLabel
+    )
 
     Box(
         modifier = modifier
@@ -199,6 +217,11 @@ fun CyberAegisHeroOrb(
                 .size(170.dp)
                 .clip(CircleShape)
                 .border(2.5.dp, primaryGlowColor, CircleShape)
+                .semantics(mergeDescendants = true) {
+                    // Without this the primary check-in control is announced only as "SAFE".
+                    contentDescription = orbA11yDescription
+                    role = Role.Button
+                }
                 .clickable {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     onTapConfirmOk()
@@ -230,9 +253,13 @@ fun CyberAegisHeroOrb(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = if (status == SafetyStatus.SAFE) "TAP TO VERIFY" else "TAP TO CONFIRM",
+                    text = if (status == SafetyStatus.SAFE) {
+                        stringResource(R.string.orb_verify)
+                    } else {
+                        stringResource(R.string.orb_confirm)
+                    },
                     color = primaryGlowColor.copy(alpha = 0.9f),
-                    fontSize = 11.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp
                 )
@@ -243,8 +270,14 @@ fun CyberAegisHeroOrb(
 
 /**
  * Tactical Hold-to-Charge Radial Emergency Arc.
- * Requires continuous press for 2.5 seconds with escalating haptic feedback to prevent false alarms.
+ * Requires continuous press for [HOLD_SOS_DURATION_MS] with escalating haptic feedback to
+ * prevent false alarms.
+ *
+ * The trigger decision is made from measured wall-clock hold time, not from the animation value.
+ * The previous version compared an animated progress against a threshold, so releasing at ~99%
+ * still fired the SOS.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TactileHoldSosRadial(
     onEmergencyTriggered: () -> Unit,
@@ -253,32 +286,13 @@ fun TactileHoldSosRadial(
     val view = LocalView.current
     var isPressing by remember { mutableStateOf(false) }
     var progress by remember { mutableFloatStateOf(0f) }
+    val sosA11yDescription = stringResource(R.string.sos_button_a11y)
 
     val animatedProgress by animateFloatAsState(
         targetValue = progress,
-        animationSpec = tween(durationMillis = if (isPressing) 2500 else 200, easing = LinearEasing),
+        animationSpec = tween(durationMillis = if (isPressing) 120 else 200, easing = LinearEasing),
         label = "SosCharge"
     )
-
-    // Trigger emergency when progress completes
-    LaunchedEffect(animatedProgress) {
-        if (animatedProgress >= 0.99f && isPressing) {
-            isPressing = false
-            progress = 0f
-            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            onEmergencyTriggered()
-        }
-    }
-
-    // Escalating haptic feedback during hold
-    LaunchedEffect(isPressing) {
-        if (isPressing) {
-            while (isPressing) {
-                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                delay(300L)
-            }
-        }
-    }
 
     Surface(
         modifier = modifier
@@ -296,14 +310,47 @@ fun TactileHoldSosRadial(
                 ),
                 shape = RoundedCornerShape(18.dp)
             )
+            .semantics(mergeDescendants = true) {
+                contentDescription = sosA11yDescription
+                role = Role.Button
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
+                        val start = SystemClock.elapsedRealtime()
                         isPressing = true
-                        progress = 1.0f
-                        tryAwaitRelease()
+                        coroutineScope {
+                            val holdLoop = launch {
+                                var hapticStep = 0
+                                while (true) {
+                                    val held = SystemClock.elapsedRealtime() - start
+                                    progress = (held.toFloat() / HOLD_SOS_DURATION_MS)
+                                        .coerceIn(0f, 1f)
+                                    if (held >= HOLD_SOS_DURATION_MS) break
+                                    // Escalating feedback: firmer taps as the hold nears completion.
+                                    view.performHapticFeedback(
+                                        if (held > HOLD_SOS_DURATION_MS / 2) {
+                                            HapticFeedbackConstants.CONTEXT_CLICK
+                                        } else {
+                                            HapticFeedbackConstants.KEYBOARD_TAP
+                                        }
+                                    )
+                                    hapticStep++
+                                    delay(if (hapticStep % 4 == 0) 150L else 300L)
+                                }
+                            }
+                            tryAwaitRelease()
+                            holdLoop.cancel()
+                        }
+                        val held = SystemClock.elapsedRealtime() - start
                         isPressing = false
-                        progress = 0f
+                        if (held >= HOLD_SOS_DURATION_MS) {
+                            progress = 1f
+                            view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                            onEmergencyTriggered()
+                        } else {
+                            progress = 0f
+                        }
                     }
                 )
             },
@@ -358,15 +405,23 @@ fun TactileHoldSosRadial(
 
                     Column {
                         Text(
-                            text = if (isPressing) "HOLDING FOR SOS…" else "HOLD FOR EMERGENCY",
+                            text = if (isPressing) stringResource(R.string.sos_holding)
+                            else stringResource(R.string.sos_hold_cta),
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
                             color = Color.White,
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = if (isPressing) "${(animatedProgress * 100).toInt()}% • RELEASE TO CANCEL" else "Press & hold 2.5s to trigger sentinel SOS",
-                            fontSize = 12.sp,
+                            text = if (isPressing) {
+                                stringResource(
+                                    R.string.sos_progress_cancel,
+                                    (animatedProgress * 100).toInt()
+                                )
+                            } else {
+                                stringResource(R.string.sos_hold_hint)
+                            },
+                            fontSize = 14.sp,
                             color = if (isPressing) Color(0xFFFCA5A5) else Color(0xFF9CA3AF)
                         )
                     }
@@ -417,8 +472,8 @@ fun TelemetryCockpitHUD(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "SENTINEL TELEMETRY ARRAY",
-                fontSize = 11.sp,
+                text = stringResource(R.string.telemetry_array),
+                fontSize = 13.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 1.sp,
                 color = Color(0xFF64748B)
@@ -432,8 +487,12 @@ fun TelemetryCockpitHUD(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = if (wifiConnected) "ONLINE" else "OFFLINE",
-                    fontSize = 11.sp,
+                    text = if (wifiConnected) {
+                        stringResource(R.string.dashboard_online)
+                    } else {
+                        stringResource(R.string.dashboard_offline)
+                    },
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (wifiConnected) StatusSafe else StatusUnknown
                 )
@@ -450,9 +509,10 @@ fun TelemetryCockpitHUD(
             // Tile 1: Battery Power Grid
             CockpitTile(
                 icon = if (isCharging) Icons.Default.Bolt else Icons.Default.Bolt,
-                title = "POWER",
-                value = "$batteryLevel%",
-                sub = if (isCharging) "Charging" else "Battery",
+                title = stringResource(R.string.common_power),
+                value = stringResource(R.string.battery_percent, batteryLevel),
+                sub = if (isCharging) stringResource(R.string.battery_charging)
+                else stringResource(R.string.battery_not_charging),
                 accentColor = if (batteryLevel <= 20) StatusEmergency else StatusSafe,
                 modifier = Modifier.weight(1f)
             )
@@ -460,9 +520,11 @@ fun TelemetryCockpitHUD(
             // Tile 2: Signal Array
             CockpitTile(
                 icon = if (wifiConnected) Icons.Default.Wifi else Icons.Default.WifiOff,
-                title = "NETWORK",
-                value = if (wifiConnected) "Wi-Fi" else "No Net",
-                sub = if (wifiConnected) "5 GHz" else "Saved Local",
+                title = stringResource(R.string.common_network),
+                value = if (wifiConnected) stringResource(R.string.wifi_connected)
+                else stringResource(R.string.wifi_disconnected),
+                sub = if (wifiConnected) stringResource(R.string.network_band)
+                else stringResource(R.string.network_local_only),
                 accentColor = if (wifiConnected) Color(0xFF38BDF8) else StatusUnknown,
                 modifier = Modifier.weight(1f)
             )
@@ -470,8 +532,8 @@ fun TelemetryCockpitHUD(
             // Tile 3: Passive Presence (Motion)
             CockpitTile(
                 icon = Icons.Default.Sensors,
-                title = "PRESENCE",
-                value = "Active",
+                title = stringResource(R.string.common_presence),
+                value = stringResource(R.string.presence_active),
                 sub = lastMotionAgoFormatted,
                 accentColor = Color(0xFFA855F7),
                 modifier = Modifier.weight(1f)
@@ -480,9 +542,10 @@ fun TelemetryCockpitHUD(
             // Tile 4: Acoustic Ear (Smoke Detector)
             CockpitTile(
                 icon = Icons.Default.Hearing,
-                title = "ACOUSTIC",
-                value = if (isAcousticListening) "Guard" else "Idle",
-                sub = "3.2kHz Ear",
+                title = stringResource(R.string.common_acoustic),
+                value = if (isAcousticListening) stringResource(R.string.acoustic_guard)
+                else stringResource(R.string.acoustic_idle),
+                sub = stringResource(R.string.acoustic_tone),
                 accentColor = Color(0xFFF59E0B),
                 modifier = Modifier.weight(1f)
             )
@@ -518,7 +581,7 @@ private fun CockpitTile(
             ) {
                 Text(
                     text = title,
-                    fontSize = 8.5.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF94A3B8),
                     letterSpacing = 0.5.sp,
@@ -542,7 +605,7 @@ private fun CockpitTile(
             )
             Text(
                 text = sub,
-                fontSize = 9.5.sp,
+                fontSize = 12.sp,
                 color = Color(0xFF64748B),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -581,7 +644,7 @@ fun CyberTopAppBar(
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.a11y_back),
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
@@ -600,7 +663,7 @@ fun CyberTopAppBar(
                 if (subtitle != null) {
                     Text(
                         text = subtitle,
-                        fontSize = 11.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp,
                         color = Color(0xFF10B981)
@@ -653,7 +716,8 @@ fun CyberButton(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
-            .height(minHeight.dp),
+            .height(minHeight.dp)
+            .semantics { role = Role.Button },
         shape = RoundedCornerShape(14.dp),
         color = bg,
         border = BorderStroke(1.dp, border)
@@ -713,7 +777,7 @@ fun CyberBadge(
             }
             Text(
                 text = text,
-                fontSize = 11.sp,
+                fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
                 color = color,
                 letterSpacing = 0.5.sp
@@ -733,7 +797,12 @@ fun CyberActionTile(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(72.dp),
+        modifier = modifier
+            .height(72.dp)
+            .semantics(mergeDescendants = true) {
+                contentDescription = "$title. $status"
+                role = Role.Button
+            },
         shape = RoundedCornerShape(14.dp),
         color = Color(0xFF0F172A),
         border = BorderStroke(1.dp, Color(0xFF1E293B))
@@ -755,7 +824,7 @@ fun CyberActionTile(
                 )
                 Text(
                     text = status,
-                    fontSize = 10.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = accentColor
                 )

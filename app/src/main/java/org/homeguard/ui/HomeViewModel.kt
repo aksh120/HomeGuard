@@ -13,24 +13,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import org.homeguard.core.communication.CommunicationManager
-import org.homeguard.core.communication.CommunicationResult
 import org.homeguard.core.data.EventRepository
 import org.homeguard.core.data.SafetyRepository
-import org.homeguard.core.data.SupabaseRemoteSyncDataSource
-import org.homeguard.core.data.SyncRepository
-import org.homeguard.core.database.HomeGuardDatabase
-import org.homeguard.core.datastore.PreferencesManager
 import org.homeguard.core.hardware.BatteryInfo
-import org.homeguard.core.hardware.BatteryMonitor
-import org.homeguard.core.hardware.ConnectivityInfo
-import org.homeguard.core.hardware.ConnectivityMonitor
-import org.homeguard.core.hardware.EmergencyAlarmManager
-import org.homeguard.core.hardware.TorchManager
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.SafetyStatus
+import org.homeguard.core.notifications.SafetyNotifier
 import org.homeguard.core.sensors.AcousticAlarmDetector
-import org.homeguard.core.sensors.CaregiverBeaconManager
 import org.homeguard.core.sensors.FallAndMotionDetector
 import org.homeguard.core.sync.SyncWorker
 import java.text.SimpleDateFormat
@@ -52,20 +41,19 @@ sealed class NavigationDestination {
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val db = HomeGuardDatabase.getInstance(application)
-    private val preferencesManager = PreferencesManager(application)
-    private val eventRepository = EventRepository(db.pendingEventDao(), db.eventAuditDao())
-    val safetyRepository = SafetyRepository(preferencesManager, eventRepository)
-    private val syncRepository = SyncRepository(eventRepository, SupabaseRemoteSyncDataSource())
+    private val app = application as org.homeguard.HomeGuardApplication
+    private val container = app.container
+    private val preferencesManager = container.preferencesManager
+    private val eventRepository: EventRepository = container.eventRepository
+    private val safetyRepository: SafetyRepository = container.safetyRepository
 
-    private val batteryMonitor = BatteryMonitor(application)
-    private val connectivityMonitor = ConnectivityMonitor(application) {
-        SyncWorker.triggerImmediateSync(getApplication())
-    }
-    private val torchManager = TorchManager(application)
-    private val alarmManager = EmergencyAlarmManager(application)
-    private val communicationManager = CommunicationManager()
-    private val caregiverBeaconManager = CaregiverBeaconManager(application)
+    private val batteryMonitor = container.batteryMonitor
+    private val connectivityMonitor = container.connectivityMonitor
+    private val torchManager = container.torchManager
+    private val alarmManager = container.alarmManager
+    private val communicationManager = container.communicationManager
+    private val caregiverBeaconManager = container.caregiverBeaconManager
+    private val notifier = SafetyNotifier(application)
 
     private val _fallDetectedAlert = MutableStateFlow(false)
     val fallDetectedAlert: StateFlow<Boolean> = _fallDetectedAlert.asStateFlow()
@@ -73,19 +61,8 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val _smokeAlarmDetectedAlert = MutableStateFlow(false)
     val smokeAlarmDetectedAlert: StateFlow<Boolean> = _smokeAlarmDetectedAlert.asStateFlow()
 
-    private val fallAndMotionDetector = FallAndMotionDetector(
-        context = application,
-        onFallDetected = {
-            _fallDetectedAlert.value = true
-        },
-        onSignificantMovement = {
-            // Implicit passive check-in when user moves/handles phone at home
-            viewModelScope.launch {
-                val config = appConfig.value
-                safetyRepository.recordCheckIn(config.deviceId)
-            }
-        }
-    )
+    private val _isAcousticEnabled = MutableStateFlow(false)
+    val isAcousticEnabled: StateFlow<Boolean> = _isAcousticEnabled.asStateFlow()
 
     private val acousticAlarmDetector = AcousticAlarmDetector(
         context = application,
@@ -96,11 +73,25 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     val isAcousticListening: StateFlow<Boolean> = acousticAlarmDetector.isListening
 
+    private val fallAndMotionDetector = FallAndMotionDetector(
+        context = application,
+        onFallDetected = {
+            _fallDetectedAlert.value = true
+        },
+        onSignificantMovement = {
+            // Implicit passive check-in when user moves/handles phone at home
+            viewModelScope.launch {
+                val deviceId = preferencesManager.ensureDeviceId()
+                safetyRepository.recordCheckIn(deviceId)
+            }
+        }
+    )
+
     val safetyStatus: StateFlow<SafetyStatus> = safetyRepository.safetyStatusFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, SafetyStatus.UNKNOWN)
 
     val batteryInfo: StateFlow<BatteryInfo> = batteryMonitor.batteryInfo
-    val connectivityInfo: StateFlow<ConnectivityInfo> = connectivityMonitor.connectivityInfo
+    val connectivityInfo = connectivityMonitor.connectivityInfo
     val isTorchOn: StateFlow<Boolean> = torchManager.isTorchOn
     val isAlarmPlaying: StateFlow<Boolean> = alarmManager.isAlarmPlaying
 
@@ -112,14 +103,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val sdf = SimpleDateFormat("h:mm a, MMM d", Locale.getDefault())
             sdf.format(Date(ts))
         } else {
-            "No recent check-in"
+            getApplication<Application>().getString(org.homeguard.R.string.last_checkin_none)
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, "No recent check-in")
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     val lastMotionAgoFormatted: StateFlow<String> = fallAndMotionDetector.telemetry.map { telemetry ->
         val elapsedMinutes = (System.currentTimeMillis() - telemetry.lastMovementTimestamp) / 60_000L
-        if (elapsedMinutes <= 1) "Just now" else "${elapsedMinutes}m ago"
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, "Just now")
+        when {
+            elapsedMinutes <= 0 -> getApplication<Application>()
+                .getString(org.homeguard.R.string.last_motion_just_now)
+            elapsedMinutes < 60 -> getApplication<Application>()
+                .getString(org.homeguard.R.string.last_motion_minutes, elapsedMinutes)
+            else -> getApplication<Application>()
+                .getString(org.homeguard.R.string.last_motion_hours, elapsedMinutes / 60)
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     val recentEvents = eventRepository.recentAuditsFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -138,6 +136,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var countdownJob: Job? = null
 
+    /** Tracks which battery thresholds have already alerted, so each fires once per discharge. */
+    private var lowBatteryNotified = false
+    private var criticalBatteryNotified = false
+
     init {
         viewModelScope.launch {
             preferencesManager.appConfigFlow.collect { config ->
@@ -146,15 +148,77 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
+
+        viewModelScope.launch {
+            // P0-4: identity must exist before any event is recorded.
+            val deviceId = preferencesManager.ensureDeviceId()
+            // P0-5: the remote schema has NOT NULL foreign keys into `devices`, so registration
+            // must happen before the first event or every insert fails on the constraint.
+            val config = appConfig.value
+            container.remoteSyncDataSource.registerDevice(
+                deviceId = deviceId,
+                deviceMode = config.deviceMode.name,
+                personName = config.personName,
+                personRole = config.personRole
+            ).onFailure {
+                android.util.Log.w(
+                    "HomeGuard",
+                    "Device registration failed; events will stay queued until it succeeds",
+                    it
+                )
+            }
+        }
+
         SyncWorker.schedulePeriodicSync(application)
 
-        // Start Sensor Engines
         fallAndMotionDetector.start()
+
+        // P0-6: the microphone is opt-in only. Never started automatically.
+        observeBatteryForNotifications()
+    }
+
+    private fun observeBatteryForNotifications() {
+        viewModelScope.launch {
+            batteryMonitor.batteryInfo.collect { info ->
+                if (info.isCharging) {
+                    lowBatteryNotified = false
+                    criticalBatteryNotified = false
+                    notifier.clearBatteryAlerts()
+                    return@collect
+                }
+                if (info.isCritical) {
+                    if (!criticalBatteryNotified) {
+                        criticalBatteryNotified = true
+                        lowBatteryNotified = true
+                        notifier.notifyBatteryCritical(info.level)
+                    }
+                } else if (info.isLow) {
+                    if (!lowBatteryNotified) {
+                        lowBatteryNotified = true
+                        notifier.notifyBatteryLow(info.level)
+                    }
+                }
+            }
+        }
+    }
+
+    /** Called only after the user explicitly enables acoustic detection and grants the mic. */
+    fun onAcousticPermissionGranted() {
+        _isAcousticEnabled.value = true
         acousticAlarmDetector.startListening()
     }
 
-    fun retryAcousticDetector() {
-        acousticAlarmDetector.startListening()
+    fun onAcousticPermissionDenied() {
+        _isAcousticEnabled.value = false
+        acousticAlarmDetector.stopListening()
+    }
+
+    fun setAcousticEnabled(enabled: Boolean) {
+        if (enabled) {
+            onAcousticPermissionGranted()
+        } else {
+            onAcousticPermissionDenied()
+        }
     }
 
     fun navigateTo(dest: NavigationDestination) {
@@ -163,9 +227,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun confirmCheckIn() {
         viewModelScope.launch {
-            val config = appConfig.value
-            safetyRepository.recordCheckIn(config.deviceId)
+            val deviceId = preferencesManager.ensureDeviceId()
+            safetyRepository.recordCheckIn(deviceId)
             caregiverBeaconManager.playRadarChirp()
+            notifier.notifyCheckInRecorded()
             SyncWorker.triggerImmediateSync(getApplication())
         }
     }
@@ -206,10 +271,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerEmergencyNow() {
         countdownJob?.cancel()
         viewModelScope.launch {
-            val config = appConfig.value
-            safetyRepository.triggerEmergency(config.deviceId)
+            val deviceId = preferencesManager.ensureDeviceId()
+            safetyRepository.triggerEmergency(deviceId)
             alarmManager.startAlarm()
             _currentDestination.value = NavigationDestination.EmergencyActive
+            if (!connectivityMonitor.connectivityInfo.value.isInternetAvailable) {
+                notifier.notifyEmergencyQueuedOffline()
+            }
             SyncWorker.triggerImmediateSync(getApplication())
         }
     }
@@ -217,13 +285,19 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun stopAlarmAndResolve() {
         alarmManager.stopAlarm()
         viewModelScope.launch {
-            safetyRepository.resolveEmergency()
+            // P1-3: resolving records a deliberate check-in so SAFE is earned, not assumed.
+            val deviceId = preferencesManager.ensureDeviceId()
+            safetyRepository.resolveEmergency(deviceId)
             _currentDestination.value = NavigationDestination.Home
         }
     }
 
     fun toggleFlashlight() {
         torchManager.toggleTorch()
+    }
+
+    fun onTorchPermissionDenied() {
+        torchManager.setTorch(false)
     }
 
     fun toggleNightMode() {
@@ -241,7 +315,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun initiateCallToPrimary(context: Context) {
         val contact = appConfig.value.primaryContact
         val result = communicationManager.initiateCall(context, contact)
-        if (result is CommunicationResult.Unavailable) {
+        if (result is org.homeguard.core.communication.CommunicationResult.Unavailable) {
             _communicationError.value = result.message
         }
     }
@@ -252,7 +326,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun saveConfig(config: AppConfig) {
         viewModelScope.launch {
-            preferencesManager.saveConfig(config)
+            val deviceId = preferencesManager.ensureDeviceId()
+            preferencesManager.saveConfig(config.copy(deviceId = deviceId))
+            // Keep the remote device row in step with local profile changes.
+            container.remoteSyncDataSource.registerDevice(
+                deviceId = deviceId,
+                deviceMode = config.deviceMode.name,
+                personName = config.personName,
+                personRole = config.personRole
+            )
         }
     }
 

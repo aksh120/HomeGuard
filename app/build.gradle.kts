@@ -13,8 +13,15 @@ val localProps = Properties().apply {
         localFile.inputStream().use { load(it) }
     }
 }
-val supabaseUrl = (localProps.getProperty("supabase.url") ?: System.getenv("SUPABASE_URL") ?: "").replace("\"", "\\\"")
-val supabaseAnonKey = (localProps.getProperty("supabase.anon.key") ?: System.getenv("SUPABASE_ANON_KEY") ?: "").replace("\"", "\\\"")
+// Debug builds may read the developer's local.properties. Release builds must NOT: they take
+// credentials from CI secrets (SUPABASE_URL / SUPABASE_ANON_KEY env or -P properties) so a
+// developer's machine never leaks a key into a shipped APK.
+val localSupabaseUrl = (localProps.getProperty("supabase.url") ?: "").replace("\"", "\\\"")
+val localSupabaseAnonKey = (localProps.getProperty("supabase.anon.key") ?: "").replace("\"", "\\\"")
+val ciSupabaseUrl = (project.findProperty("SUPABASE_URL") ?: System.getenv("SUPABASE_URL") ?: "")
+    .toString().replace("\"", "\\\"")
+val ciSupabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY")
+    ?: System.getenv("SUPABASE_ANON_KEY") ?: "").toString().replace("\"", "\\\"")
 
 android {
     namespace = "org.homeguard"
@@ -28,21 +35,22 @@ android {
         versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {
-        release {
-            isMinifyEnabled = false
+        getByName("debug") {
+            buildConfigField("String", "SUPABASE_URL", "\"$localSupabaseUrl\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY", "\"$localSupabaseAnonKey\"")
+        }
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-        }
-        debug {
-            isMinifyEnabled = false
+            buildConfigField("String", "SUPABASE_URL", "\"$ciSupabaseUrl\"")
+            buildConfigField("String", "SUPABASE_ANON_KEY", "\"$ciSupabaseAnonKey\"")
         }
     }
 
@@ -77,7 +85,6 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.androidx.material.icons.extended)
-    implementation(libs.androidx.navigation.compose)
 
     // DataStore
     implementation(libs.androidx.datastore.preferences)
@@ -96,6 +103,9 @@ dependencies {
     // Test
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    // Android's org.json is a stub on the JVM unit-test classpath (toString() returns null).
+    // This supplies the real implementation so payload serialisation is actually exercised.
+    testImplementation(libs.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
