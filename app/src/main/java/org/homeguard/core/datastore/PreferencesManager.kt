@@ -23,12 +23,14 @@ import org.homeguard.core.model.HomeInfo
 import org.homeguard.core.model.MedicalInfo
 import org.homeguard.core.model.NightModeSchedule
 import org.homeguard.core.model.SafetyStatus
+import org.homeguard.core.data.AuthSessionStore
+import org.homeguard.core.data.StoredAuthSession
 import org.homeguard.core.model.SyncHealth
 import java.util.UUID
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "homeguard_prefs")
 
-class PreferencesManager(private val context: Context) {
+class PreferencesManager(private val context: Context) : AuthSessionStore {
 
     private val dataStore = context.dataStore
 
@@ -93,6 +95,16 @@ class PreferencesManager(private val context: Context) {
         val KEY_SYNC_LAST_ERROR = stringPreferencesKey("sync_last_error")
         val KEY_SYNC_REMOTE_CONFIGURED = booleanPreferencesKey("sync_remote_configured")
         val KEY_SYNC_AUTHENTICATED = booleanPreferencesKey("sync_authenticated")
+        val KEY_SYNC_RATE_LIMITED = booleanPreferencesKey("sync_rate_limited")
+
+        // One-time repair of events stranded at MAX_RETRIES by the sign-up rate limit (Phase 0).
+        val KEY_EXHAUSTED_EVENTS_RECOVERED = booleanPreferencesKey("exhausted_events_recovered")
+
+        // Persisted Supabase session. Without this, every cold start re-ran anonymous sign-up and
+        // was rate limited, so alerts never left the phone.
+        val KEY_AUTH_ACCESS_TOKEN = stringPreferencesKey("auth_access_token")
+        val KEY_AUTH_REFRESH_TOKEN = stringPreferencesKey("auth_refresh_token")
+        val KEY_AUTH_EXPIRES_AT = longPreferencesKey("auth_expires_at")
 
         // Household sharing (sections 6B and 27)
         val KEY_HOUSEHOLD_ID = stringPreferencesKey("household_id")
@@ -113,6 +125,7 @@ class PreferencesManager(private val context: Context) {
         SyncHealth(
             isRemoteConfigured = prefs[KEY_SYNC_REMOTE_CONFIGURED] ?: false,
             isAuthenticated = prefs[KEY_SYNC_AUTHENTICATED] ?: false,
+            isRateLimited = prefs[KEY_SYNC_RATE_LIMITED] ?: false,
             lastAttemptAt = prefs[KEY_SYNC_LAST_ATTEMPT],
             lastSuccessAt = prefs[KEY_SYNC_LAST_SUCCESS],
             lastError = prefs[KEY_SYNC_LAST_ERROR]
@@ -138,6 +151,79 @@ class PreferencesManager(private val context: Context) {
         dataStore.edit { prefs ->
             prefs[KEY_SYNC_LAST_ERROR] = message
         }
+    }
+
+    /**
+     * Records a rate-limit outcome distinctly from missing credentials.
+     *
+     * The two were previously indistinguishable in the UI, which sent the user looking for a backend
+     * setting that was already correct.
+     */
+    suspend fun recordRateLimited(retryAfterSeconds: Long?) {
+        dataStore.edit { prefs ->
+            prefs[KEY_SYNC_RATE_LIMITED] = true
+            prefs[KEY_SYNC_LAST_ERROR] = retryAfterSeconds
+                ?.let { "Rate limited by the server; retrying in about ${it}s" }
+                ?: "Rate limited by the server; will retry automatically"
+        }
+    }
+
+    /** Clears the rate-limit flag after a successful send. */
+    suspend fun recordRateLimitCleared() {
+        dataStore.edit { prefs ->
+            prefs[KEY_SYNC_RATE_LIMITED] = false
+        }
+    }
+
+    val isRateLimitedFlow: Flow<Boolean> = dataStore.data.map { prefs ->
+        prefs[KEY_SYNC_RATE_LIMITED] ?: false
+    }
+
+    // --- persisted auth session ----------------------------------------------------------------
+
+    /**
+     * Reads the stored Supabase session, or null when none is usable.
+     *
+     * A refresh token with no access token is treated as absent: there is nothing to send, and the
+     * client will sign up again rather than assume the session is usable.
+     */
+    override suspend fun read(): StoredAuthSession? {
+        val prefs = dataStore.data.first()
+        val access = prefs[KEY_AUTH_ACCESS_TOKEN] ?: return null
+        val refresh = prefs[KEY_AUTH_REFRESH_TOKEN] ?: return null
+        val expiresAt = prefs[KEY_AUTH_EXPIRES_AT] ?: return null
+        if (access.isBlank() || refresh.isBlank()) return null
+        return StoredAuthSession(access, refresh, expiresAt)
+    }
+
+    override suspend fun write(session: StoredAuthSession) {
+        dataStore.edit { prefs ->
+            prefs[KEY_AUTH_ACCESS_TOKEN] = session.accessToken
+            prefs[KEY_AUTH_REFRESH_TOKEN] = session.refreshToken
+            prefs[KEY_AUTH_EXPIRES_AT] = session.expiresAtMillis
+        }
+    }
+
+    override suspend fun clear() {
+        dataStore.edit { prefs ->
+            prefs.remove(KEY_AUTH_ACCESS_TOKEN)
+            prefs.remove(KEY_AUTH_REFRESH_TOKEN)
+            prefs.remove(KEY_AUTH_EXPIRES_AT)
+        }
+    }
+
+    /**
+     * Whether the one-time repair of rate-limit-stranded events has already run.
+     *
+     * Deliberately once per install rather than every sync: continuously re-queueing rows that
+     * cannot be delivered would turn a transient outage into an endless retry loop.
+     */
+    suspend fun hasRecoveredExhaustedEvents(): Boolean {
+        return dataStore.data.first()[KEY_EXHAUSTED_EVENTS_RECOVERED] ?: false
+    }
+
+    suspend fun markExhaustedEventsRecovered() {
+        dataStore.edit { prefs -> prefs[KEY_EXHAUSTED_EVENTS_RECOVERED] = true }
     }
 
     /** Household this device belongs to, or null when it is not shared yet. */

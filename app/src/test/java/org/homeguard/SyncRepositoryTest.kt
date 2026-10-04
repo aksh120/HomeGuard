@@ -3,6 +3,7 @@ package org.homeguard
 import kotlinx.coroutines.test.runTest
 import org.homeguard.core.data.EventRepository
 import org.homeguard.core.data.RemoteNotConfiguredException
+import org.homeguard.core.data.RemoteRateLimitedException
 import org.homeguard.core.data.RemoteSyncDataSource
 import org.homeguard.core.data.SyncIncompleteException
 import org.homeguard.core.data.SyncRepository
@@ -167,6 +168,80 @@ class SyncRepositoryTest {
             PendingEventDao.MAX_RETRIES,
             pendingDao.events[eventId]?.retryCount
         )
+    }
+
+    /**
+     * Phase 0 / D-11: a rate limit says nothing about the event, so it must not spend a retry.
+     *
+     * This is the defect that stranded 23 queued safety events permanently. Because every failure
+     * advanced retryCount, ten throttled syncs pushed real emergencies past MAX_RETRIES, from where
+     * getPendingEvents never selects them again and only a reinstall cleared the queue.
+     */
+    @Test
+    fun `rate limiting does not consume an event's retries`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(RemoteRateLimitedException(retryAfterSeconds = 30)) }
+
+        repeat(PendingEventDao.MAX_RETRIES * 2) {
+            val result = syncRepository.syncPendingEvents()
+            assertTrue(result.exceptionOrNull() is RemoteRateLimitedException)
+        }
+
+        val stored = pendingDao.events[eventId]
+        assertNotNull("the event must still be queued", stored)
+        assertEquals(0, stored!!.retryCount)
+        assertEquals(EventSyncStatus.PENDING.name, stored.syncStatus)
+    }
+
+    /** The limit clears and the emergency goes out with its retry budget fully intact. */
+    @Test
+    fun `event survives repeated rate limiting and delivers once the limit clears`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(RemoteRateLimitedException()) }
+
+        repeat(5) { syncRepository.syncPendingEvents() }
+
+        remote.behaviour = { Result.success(Unit) }
+        remote.sentIds.clear()
+        val result = syncRepository.syncPendingEvents()
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.getOrThrow())
+        assertFalse(pendingDao.events.containsKey(eventId))
+        assertEquals(listOf(eventId), remote.sentIds)
+    }
+
+    /**
+     * Phase 0 repair: events already stranded at the ceiling must be recoverable, because otherwise
+     * the existing 23 stranded rows stay undeliverable forever.
+     */
+    @Test
+    fun `stranded events can be re-armed and then delivered`() = runTest {
+        val eventId = eventRepository.enqueueEmergencySos("device-1")
+        remote.behaviour = { Result.failure(IllegalStateException("permanent")) }
+        repeat(PendingEventDao.MAX_RETRIES) { syncRepository.syncPendingEvents() }
+
+        // Exhausted: invisible to the queue.
+        assertEquals(1, eventRepository.countExhaustedEvents())
+        remote.sentIds.clear()
+        syncRepository.syncPendingEvents()
+        assertTrue(remote.sentIds.isEmpty())
+
+        val released = eventRepository.resetExhaustedEvents()
+        assertEquals(1, released)
+        assertEquals(0, eventRepository.countExhaustedEvents())
+
+        remote.behaviour = { Result.success(Unit) }
+        assertTrue(syncRepository.syncPendingEvents().isSuccess)
+        assertEquals(listOf(eventId), remote.sentIds)
+    }
+
+    @Test
+    fun `re-arming reports zero when nothing was stranded`() = runTest {
+        eventRepository.enqueueCheckIn("device-1")
+
+        assertEquals(0, eventRepository.resetExhaustedEvents())
+        assertEquals(0, eventRepository.countExhaustedEvents())
     }
 
     @Test

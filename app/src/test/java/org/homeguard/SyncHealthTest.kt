@@ -82,4 +82,53 @@ class SyncHealthTest {
         )
         assertEquals(SyncStatus.HEALTHY, health.status)
     }
+
+    // --- Phase 0: rate limiting is not "not signed in" -------------------------------------------
+
+    /**
+     * The distinction that made the outage undiagnosable. Both states looked identical to the
+     * resident, and both sent them looking for a backend setting that was already correct.
+     */
+    @Test
+    fun `being rate limited is not the same as failing to sign in`() {
+        val health = SyncHealth(
+            isRemoteConfigured = true,
+            isAuthenticated = false,
+            isRateLimited = true
+        )
+        assertEquals(SyncStatus.RATE_LIMITED, health.status)
+    }
+
+    @Test
+    fun `rate limiting outranks a previous success but is not an error`() {
+        val health = SyncHealth(
+            isRemoteConfigured = true,
+            isAuthenticated = true,
+            isRateLimited = true,
+            lastSuccessAt = 1_700_000_000_000L
+        )
+        assertEquals(SyncStatus.RATE_LIMITED, health.status)
+    }
+
+    /** Nothing is wrong with the build, so local-only mode still wins over a throttle. */
+    @Test
+    fun `missing credentials outrank rate limiting`() {
+        val health = SyncHealth(
+            isRemoteConfigured = false,
+            isAuthenticated = false,
+            isRateLimited = true
+        )
+        assertEquals(SyncStatus.NOT_CONFIGURED, health.status)
+    }
+
+    @Test
+    fun `clearing the rate limit returns a healthy install to healthy`() {
+        val health = SyncHealth(
+            isRemoteConfigured = true,
+            isAuthenticated = true,
+            isRateLimited = false,
+            lastSuccessAt = 1_700_000_000_000L
+        )
+        assertEquals(SyncStatus.HEALTHY, health.status)
+    }
 }

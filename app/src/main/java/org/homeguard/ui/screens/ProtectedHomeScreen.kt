@@ -397,6 +397,10 @@ private fun SyncStatusCard(
             stringResource(R.string.sync_local_only) to MaterialTheme.colorScheme.onSurfaceVariant
         org.homeguard.core.model.SyncStatus.NOT_AUTHENTICATED ->
             stringResource(R.string.sync_not_signed_in) to org.homeguard.core.designsystem.theme.StatusUnknown
+        // Deliberately not an alarm colour: nothing is wrong and nothing is lost, so colouring this
+        // red would train the resident to ignore the card that matters.
+        org.homeguard.core.model.SyncStatus.RATE_LIMITED ->
+            stringResource(R.string.sync_rate_limited) to org.homeguard.core.designsystem.theme.StatusUnknown
         org.homeguard.core.model.SyncStatus.ERROR ->
             stringResource(R.string.sync_error) to org.homeguard.core.designsystem.theme.StatusEmergency
     }
@@ -406,6 +410,8 @@ private fun SyncStatusCard(
             stringResource(R.string.sync_local_only_detail)
         org.homeguard.core.model.SyncStatus.NOT_AUTHENTICATED ->
             stringResource(R.string.sync_not_signed_in_detail)
+        org.homeguard.core.model.SyncStatus.RATE_LIMITED ->
+            stringResource(R.string.sync_rate_limited_detail)
         org.homeguard.core.model.SyncStatus.ERROR ->
             stringResource(R.string.sync_error_detail)
         org.homeguard.core.model.SyncStatus.PENDING ->

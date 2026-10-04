@@ -158,6 +158,8 @@
     <string name="sync_local_only_detail">No cloud configured. Alerts are kept here and will not reach anyone.</string>
     <string name="sync_not_signed_in">Not signed in</string>
     <string name="sync_not_signed_in_detail">Cannot reach the alert service. Check the internet connection.</string>
+    <string name="sync_rate_limited">Waiting to send</string>
+    <string name="sync_rate_limited_detail">The alert service is busy right now. Anything saved is safe and will send automatically.</string>
     <string name="sync_error">Alerts are not being sent</string>
     <string name="sync_error_detail">%1$s. Alerts are saved here until this is fixed.</string>
 

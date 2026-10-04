@@ -45,6 +45,19 @@ class FakePendingEventDao : PendingEventDao {
     override fun getPendingCountFlow() = flowOf(events.size)
 
     override suspend fun getById(id: String): PendingEventEntity? = events[id]
+
+    override suspend fun resetExhaustedEvents(maxRetries: Int): Int {
+        val stranded = events.values.filter {
+            it.syncStatus == EventSyncStatus.FAILED.name && it.retryCount >= maxRetries
+        }
+        stranded.forEach { events[it.id] = it.copy(retryCount = 0, syncStatus = EventSyncStatus.PENDING.name) }
+        return stranded.size
+    }
+
+    override suspend fun countExhaustedEvents(maxRetries: Int): Int =
+        events.values.count {
+            it.syncStatus == EventSyncStatus.FAILED.name && it.retryCount >= maxRetries
+        }
 }
 
 class FakeEventAuditDao : EventAuditDao {

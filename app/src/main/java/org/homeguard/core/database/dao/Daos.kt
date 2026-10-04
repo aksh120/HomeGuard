@@ -40,6 +40,26 @@ interface PendingEventDao {
     @Query("SELECT * FROM pending_events WHERE id = :id")
     suspend fun getById(id: String): PendingEventEntity?
 
+    /**
+     * Re-arms events stranded at the retry ceiling, returning how many were released.
+     *
+     * Rows at MAX_RETRIES are permanently unselectable by [getPendingEvents], so a genuine
+     * emergency recorded during the sign-up rate-limit outage could never be delivered. Run once
+     * per install rather than every sync: continuously re-arming rows that still cannot be sent
+     * would convert a transient outage into an unbounded retry loop.
+     */
+    @Query(
+        """
+        UPDATE pending_events
+        SET retryCount = 0, syncStatus = 'PENDING'
+        WHERE syncStatus = 'FAILED' AND retryCount >= :maxRetries
+        """
+    )
+    suspend fun resetExhaustedEvents(maxRetries: Int): Int
+
+    @Query("SELECT COUNT(*) FROM pending_events WHERE syncStatus = 'FAILED' AND retryCount >= :maxRetries")
+    suspend fun countExhaustedEvents(maxRetries: Int): Int
+
     companion object {
         const val MAX_RETRIES = 10
     }

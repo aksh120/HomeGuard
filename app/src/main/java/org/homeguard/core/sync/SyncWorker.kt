@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters
 import android.util.Log
 import org.homeguard.HomeGuardApplication
 import org.homeguard.core.data.RemoteNotConfiguredException
+import org.homeguard.core.data.RemoteRateLimitedException
 import java.util.concurrent.TimeUnit
 
 class SyncWorker(
@@ -52,6 +53,15 @@ class SyncWorker(
 
             if (result.isSuccess) {
                 preferences.recordSyncSuccess()
+                preferences.recordRateLimitCleared()
+                recoverStrandedEvents(container, preferences)
+                Result.success()
+            } else if (failure is RemoteRateLimitedException) {
+                // Transient. Events stay queued and none of them lost a retry, so this resolves
+                // itself once the limit clears. Reporting it as "not signed in" would be wrong
+                // advice, since there is nothing for the user to change.
+                preferences.recordRateLimited(failure.retryAfterSeconds)
+                Log.w("SyncWorker", "Supabase rate limited; events stay queued and will retry.")
                 Result.success()
             } else if (failure is RemoteNotConfiguredException) {
                 // Credentials or session missing. Keep events queued, and record why so the app
@@ -68,6 +78,30 @@ class SyncWorker(
             runCatching { preferences.recordSyncError(e.message ?: "Unexpected error") }
             Log.e("SyncWorker", "Sync failed: ${e.message}")
             Result.retry()
+        }
+    }
+
+    /**
+     * Releases events stranded at the retry ceiling, once per install.
+     *
+     * Runs only after a sync has actually succeeded, which proves the pipeline works again, so
+     * re-arming cannot mask a continuing failure. An event that fails again simply climbs back to
+     * the ceiling and stays put.
+     */
+    private suspend fun recoverStrandedEvents(
+        container: org.homeguard.core.di.AppContainer,
+        preferences: org.homeguard.core.datastore.PreferencesManager
+    ) {
+        try {
+            if (preferences.hasRecoveredExhaustedEvents()) return
+            val released = container.eventRepository.resetExhaustedEvents()
+            preferences.markExhaustedEventsRecovered()
+            if (released > 0) {
+                Log.i("SyncWorker", "Re-armed $released event(s) stranded by the sign-up rate limit")
+            }
+        } catch (e: Exception) {
+            // Never fail a sync because the repair could not run; it runs again next time.
+            Log.w("SyncWorker", "Could not re-arm stranded events: ${e.message}")
         }
     }
 

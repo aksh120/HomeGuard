@@ -226,6 +226,13 @@ class SupabaseRemoteSyncDataSource(
                 authClient.invalidate()
                 throw IllegalStateException("Supabase rejected the session (HTTP $responseCode)")
             }
+            if (responseCode == 429) {
+                // Throttling. Distinct from a missing session so the caller does not report the
+                // user's backend as broken, and so queued events do not lose their retries.
+                throw RemoteRateLimitedException(
+                    conn.getHeaderField("Retry-After")?.toLongOrNull()
+                )
+            }
             if (responseCode !in 200..299) {
                 val errorStream = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
                 throw IllegalStateException("Supabase returned HTTP $responseCode: $errorStream")

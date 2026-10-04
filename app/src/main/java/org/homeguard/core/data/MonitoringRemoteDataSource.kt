@@ -62,12 +62,24 @@ class MonitoringRemoteDataSource(
         }
     }
 
+    /**
+     * Resolves an invite code to a household.
+     *
+     * Uses the find_household_by_invite_code RPC rather than reading `households` directly. The
+     * direct read is impossible by construction: the SELECT policy requires existing membership, and
+     * a prospective caregiver has none. That made joining unreachable regardless of client code.
+     *
+     * The code is the credential here, so a miss returns the same message whether the code is wrong
+     * or belongs to a household that no longer exists.
+     */
     suspend fun findHouseholdByCode(inviteCode: String): Result<Household> =
         withContext(Dispatchers.IO) {
             val token = authClient.accessToken()
                 ?: return@withContext Result.failure(RemoteNotConfiguredException())
-            val encoded = URLEncoder.encode(inviteCode.trim(), "UTF-8")
-            when (val result = request("GET", "households?invite_code=eq.$encoded&select=*", null, token)) {
+            val body = JSONObject().apply {
+                put("code", inviteCode.trim().uppercase(Locale.ROOT))
+            }
+            when (val result = request("POST", "rpc/find_household_by_invite_code", body.toString(), token)) {
                 is HttpResult.Failure -> Result.failure(result.error)
                 is HttpResult.Success -> {
                     val row = result.rows.firstOrNull()
@@ -253,6 +265,12 @@ class MonitoringRemoteDataSource(
                 authClient.invalidate()
                 val rejected = IllegalStateException("Supabase rejected the session (HTTP $code)")
                 return@withContext HttpResult.Failure(rejected)
+            }
+            if (code == 429) {
+                // Throttling, not a broken request. Reported distinctly so queued events keep their
+                // retries and the UI can say "temporarily limited" instead of "not signed in".
+                val retryAfter = conn.getHeaderField("Retry-After")?.toLongOrNull()
+                return@withContext HttpResult.Failure(RemoteRateLimitedException(retryAfter))
             }
             if (code !in 200..299) {
                 val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()

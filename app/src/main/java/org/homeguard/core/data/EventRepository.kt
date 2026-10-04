@@ -123,4 +123,17 @@ class EventRepository(
             )
         }
     }
+
+    /** How many events are stranded at the retry ceiling and therefore undeliverable. */
+    suspend fun countExhaustedEvents(): Int =
+        pendingEventDao.countExhaustedEvents(PendingEventDao.MAX_RETRIES)
+
+    /**
+     * Re-arms stranded events, returning how many were released.
+     *
+     * Phase 0 repair for the sign-up rate-limit outage, which left real safety events permanently
+     * unselectable. Caller is responsible for running it at most once per install.
+     */
+    suspend fun resetExhaustedEvents(): Int =
+        pendingEventDao.resetExhaustedEvents(PendingEventDao.MAX_RETRIES)
 }

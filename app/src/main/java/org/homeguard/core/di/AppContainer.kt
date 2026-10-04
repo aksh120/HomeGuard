@@ -41,10 +41,18 @@ class AppContainer(private val context: Context) {
         SafetyRepository(preferencesManager, eventRepository)
     }
 
-    val authClient: SupabaseAuthClient by lazy {
+    /**
+ * Session persistence is what fixed the sign-up rate limit.
+ *
+ * Previously the token lived in memory only, so every cold start re-ran anonymous sign-up against a
+ * per-IP limit, collected HTTP 429, and stranded queued events. Reusing the persisted refresh token
+ * means a restart costs one refresh call instead of a new sign-up.
+ */
+val authClient: SupabaseAuthClient by lazy {
         SupabaseAuthClient(
             BuildConfig.SUPABASE_URL,
-            BuildConfig.SUPABASE_ANON_KEY
+            BuildConfig.SUPABASE_ANON_KEY,
+            sessionStore = preferencesManager
         )
     }
 
