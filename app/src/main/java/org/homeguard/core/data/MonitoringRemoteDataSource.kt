@@ -32,19 +32,35 @@ class MonitoringRemoteDataSource(
 
     // --- household lifecycle ------------------------------------------------------------
 
-    suspend fun createHousehold(name: String): Result<Household> = withContext(Dispatchers.IO) {
+    /**
+ * Creates a household and enrols this device as its first member in one call.
+ *
+ * Uses the create_household_with_membership RPC rather than inserting into `households` directly.
+ * A direct insert with return=representation always failed with 42501: RETURNING is evaluated
+ * against the table's SELECT policy, which requires existing membership, so the freshly created row
+ * was invisible to the caller that had just created it. The previous two-request sequence could also
+ * leave a household with no member, which nobody could then see or join.
+ *
+ * created_by is filled from the request JWT by a trigger, so ownership cannot be forged and is not
+ * accepted as a parameter here.
+ */
+suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
+    withContext(Dispatchers.IO) {
         val token = authClient.accessToken()
             ?: return@withContext Result.failure(RemoteNotConfiguredException())
-        val userId = authClient.currentUserId()
-        if (userId.isBlank()) {
-            return@withContext Result.failure(IllegalStateException("No active session"))
-        }
         val body = JSONObject().apply {
-            put("name", name.ifBlank { "Home" })
-            put("invite_code", generateInviteCode())
-            put("created_by", userId)
+            put("household_name", name.ifBlank { "Home" })
+            put("code", generateInviteCode())
+            put("member_device_id", deviceId)
         }
-        when (val result = request("POST", "households", body.toString(), token)) {
+        when (
+            val result = request(
+                "POST",
+                "rpc/create_household_with_membership",
+                body.toString(),
+                token
+            )
+        ) {
             is HttpResult.Failure -> Result.failure(result.error)
             is HttpResult.Success -> {
                 val row = result.rows.firstOrNull()

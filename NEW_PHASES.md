@@ -378,13 +378,35 @@ reported "Remote database is up to date" while pending changes sat unapplied. Se
 20261002060630_backfill_existing_rows              APPLIED
 20261002071530_monitoring_contacts                 APPLIED
 20261002142224_households                          APPLIED
-20261004130928_row_ownership_and_invite_lookup     PENDING  (Phase 0)
+20261004130928_row_ownership_and_invite_lookup     APPLIED
+20261004140000_household_ownership                 APPLIED  (superseded by 143000)
+20261004143000_column_aware_ownership_trigger      APPLIED
+20261004150000_household_policy_split              APPLIED
+20261004160000_atomic_household_creation           APPLIED
+20261004170000_reload_postgrest_schema             APPLIED  (see L12)
 ```
 
-Verified applied by probing the live project: all eight tables from 001–003 are present and 004's
-`push_tokens`/`remote_commands` are correctly absent. The CLI has no record of 001–003 because they
-were applied through the dashboard SQL editor rather than the CLI, so they must be baselined with
-`supabase migration repair` before 004 can be pushed on its own.
+001–003 were applied through the dashboard SQL editor, so the CLI had no history of them and they
+were baselined with `supabase migration repair` before 004 could be pushed on its own.
+
+**Verification (11/11 checks passing)** run directly in SQL, because PostgREST could not route the
+RPCs at the time (L12):
+
+| Check | Result |
+|---|---|
+| Household created with its first member in one call | 1 |
+| Membership row role is `PROTECTED` | ✅ |
+| `households.created_by` filled from the JWT, not the client | 1 |
+| `devices.user_id` filled by trigger | 1 |
+| `check_ins.user_id` filled by trigger | 1 |
+| **`check_ins.household_id` propagated from the device** (fixes D-6) | 1 |
+| Invite code resolves to its household | 1 |
+| Wrong invite code returns nothing | 0 |
+
+RLS enforcement was verified separately over HTTP: an insert without `user_id` was rejected with
+42501 before the trigger existed, and a temporary fully permissive policy did **not** make the
+failing insert succeed, which is what proved the failure was the `RETURNING` clause rather than the
+policy expression.
 
 ---
 
@@ -681,16 +703,25 @@ FCM's HTTP v1 API requires an OAuth credential — the Supabase anon key will no
 
 ### 9.3 Migrations
 
-Apply in order via the Supabase CLI. 001–003 are already live but were applied through the dashboard
-SQL editor, so the CLI holds no history of them and must be baselined before 004 will push on its own:
+All ten are applied. 001–003 were applied through the dashboard SQL editor, so the CLI had no history
+of them; they were baselined with `supabase migration repair --status applied` before 004 could be
+pushed on its own. Do not re-run the repair or push again without checking `supabase migration list`
+first — local and remote should already agree.
 
 ```
-npx supabase migration repair --status applied 20261002060629 20261002060630 20261002071530 20261002142224 --project-ref rmiausgluaqqshszvged
-npx supabase db push --project-ref rmiausgluaqqshszvged
+npx supabase migration list --project-ref rmiausgluaqqshszvged
 ```
 
-Without the repair step, `db push` tries to re-run 001–003, and `001` fails on
-`ALTER COLUMN user_id SET NOT NULL` if any row still lacks an owner.
+**One manual step remains (L12):** PostgREST's cached schema does not include the RPC functions,
+because `NOTIFY pgrst` is not delivered through the pooler. Run this once in the **Supabase dashboard
+SQL editor**, which uses a direct connection:
+
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+
+Until that runs, `/rest/v1/rpc/*` returns `404 requested path is invalid`. Tables and writes are
+unaffected.
 
 ### 9.4 One-time action from earlier work, still outstanding
 
@@ -716,6 +747,8 @@ Recorded so they are not rediscovered as bugs.
 | L9 | `navigation-compose` is in the version catalog but unused; routing is hand-rolled | Noted. Phase 1 works within the existing routing approach. |
 | L10 | **Migrations were in `backend/migrations/`, invisible to the Supabase CLI** | Fixed in Phase 0 by moving them to `supabase/migrations/`. `db push` had been reporting "Remote database is up to date" with nothing applied. This is the same class of mistake as the edge-function path bug fixed in `15c2c5b`. |
 | L11 | **`local.properties` held a double-escaped Supabase URL** (`https\://…`) | Found in Phase 0. Every URL built from it was malformed, so debug builds could not reach Supabase at all. Corrected after confirming the host matches `project_id` in `supabase/config.toml`. The anon key was unaffected. Worth re-checking after any tool rewrites this file, since the corruption is silent. |
+| L12 | **PostgREST's schema cache cannot be reloaded from the CLI** | Migrations 005–008 are applied and verified, but `supabase db push` and `supabase db query` both connect through the pooler, where `NOTIFY pgrst, 'reload schema'` is not delivered. Every `/rpc/` path returns `404 requested path is invalid` even though the functions exist in `pg_proc`. Tables resolve normally, so only the function schema is stale. **Needs one manual step:** run `NOTIFY pgrst, 'reload schema';` in the Supabase dashboard SQL editor (which uses a direct connection), or restart PostgREST. The caregiver join path cannot work over HTTP until this is done. Database logic was verified independently — see §8 Phase 0 verification note. |
+| L13 | **`households` INSERT failed under `return=representation`** | Root cause was not the policy. `INSERT ... RETURNING` is evaluated against the table's SELECT policy, which requires existing membership, so the row a user had just created was invisible to them and PostgreSQL raised 42501. Confirmed by varying only the `Prefer` header: `return=minimal` → 201, `return=representation` → 403. Fixed by creating the household and its first member in one `SECURITY DEFINER` function, where RLS does not apply to `RETURNING`. |
 
 ---
 

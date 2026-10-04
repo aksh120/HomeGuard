@@ -595,11 +595,13 @@ fun switchToProtectedProfile() {
                 return@launch
             }
             val remote = container.monitoringRemoteDataSource
-            remote.createHousehold(name)
+            val deviceId = preferencesManager.ensureDeviceId()
+            remote.createHousehold(name, deviceId)
                 .onSuccess { household ->
-                    val deviceId = preferencesManager.ensureDeviceId()
+                    // Creation now enrols this device as the household's first member atomically, so
+                    // the separate membership insert that used to follow is gone. It could also fail
+                    // on its own, leaving a household nobody could see or ever join.
                     remote.attachDeviceToHousehold(household.id, deviceId)
-                    remote.joinHousehold(household.id, deviceId, "PROTECTED")
                     rememberHousehold(household)
                     // Publish the household id on future writes so caregivers can find the device.
                     publishHouseholdToEvents(household.id)
