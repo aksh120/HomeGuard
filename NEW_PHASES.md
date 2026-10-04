@@ -280,7 +280,7 @@ Emergency events, check-ins, heartbeat status, and monitoring contacts are all w
 
 ### D-7 — Rows are written without `user_id`
 
-`backend/schema.sql` and `backend/migrations/001b_backfill_existing_rows.sql` both set
+`backend/schema.sql` and `supabase/migrations/20261002060630_backfill_existing_rows.sql` both set
 `user_id UUID NOT NULL`. No ordinary sync payload supplies it. RLS policies require
 `auth.uid() = user_id`, so these inserts fail the not-null constraint even once the 429 is fixed.
 
@@ -289,7 +289,7 @@ layer and non-spoofable, rather than trusting each client to send it.
 
 ### D-8 — Remote SOS is impossible by policy design
 
-`backend/migrations/003_households.sql:139-143`
+`supabase/migrations/20261002142224_households.sql:139-143`
 
 ```sql
 CREATE POLICY "write_own_emergency_events" ON public.emergency_events
@@ -369,14 +369,22 @@ follow this established pattern.
 
 ### Migration order
 
+Migrations live in `supabase/migrations/`, which is the only directory the Supabase CLI reads. They
+were previously in `backend/migrations`, where `supabase db push` could not see them — the CLI
+reported "Remote database is up to date" while pending changes sat unapplied. See L10.
+
 ```
-001  RLS ownership                     APPLIED
-001b Backfill existing rows           APPLIED
-002  Monitoring contacts + readings   APPLIED
-003  Households                        NOT CONFIRMED APPLIED
-004  push_tokens, remote_commands,     PENDING
-     source/triggered_by, triggers     (Phase 5)
+20261002060629_rls_ownership                       APPLIED
+20261002060630_backfill_existing_rows              APPLIED
+20261002071530_monitoring_contacts                 APPLIED
+20261002142224_households                          APPLIED
+20261004130928_row_ownership_and_invite_lookup     PENDING  (Phase 0)
 ```
+
+Verified applied by probing the live project: all eight tables from 001–003 are present and 004's
+`push_tokens`/`remote_commands` are correctly absent. The CLI has no record of 001–003 because they
+were applied through the dashboard SQL editor rather than the CLI, so they must be baselined with
+`supabase migration repair` before 004 can be pushed on its own.
 
 ---
 
@@ -648,12 +656,16 @@ FCM's HTTP v1 API requires an OAuth credential — the Supabase anon key will no
 
 ### 9.3 Migrations
 
-Apply in order via the Supabase CLI. `003` is **not confirmed applied** and must be verified before
-`004` is safe:
+Apply in order via the Supabase CLI. 001–003 are already live but were applied through the dashboard
+SQL editor, so the CLI holds no history of them and must be baselined before 004 will push on its own:
 
 ```
-supabase db push --project-ref rmiausgluaqqshszvged
+npx supabase migration repair --status applied 20261002060629 20261002060630 20261002071530 20261002142224 --project-ref rmiausgluaqqshszvged
+npx supabase db push --project-ref rmiausgluaqqshszvged
 ```
+
+Without the repair step, `db push` tries to re-run 001–003, and `001` fails on
+`ALTER COLUMN user_id SET NOT NULL` if any row still lacks an owner.
 
 ### 9.4 One-time action from earlier work, still outstanding
 
@@ -677,6 +689,8 @@ Recorded so they are not rediscovered as bugs.
 | L7 | **Resend free tier is 100 emails/month on one domain** | Adequate for testing and small deployments. |
 | L8 | **Supabase log retention is 1 day on the free plan** | A delayed delivery failure may not be diagnosable after a day. |
 | L9 | `navigation-compose` is in the version catalog but unused; routing is hand-rolled | Noted. Phase 1 works within the existing routing approach. |
+| L10 | **Migrations were in `backend/migrations/`, invisible to the Supabase CLI** | Fixed in Phase 0 by moving them to `supabase/migrations/`. `db push` had been reporting "Remote database is up to date" with nothing applied. This is the same class of mistake as the edge-function path bug fixed in `15c2c5b`. |
+| L11 | **`local.properties` held a double-escaped Supabase URL** (`https\://…`) | Found in Phase 0. Every URL built from it was malformed, so debug builds could not reach Supabase at all. Corrected after confirming the host matches `project_id` in `supabase/config.toml`. The anon key was unaffected. Worth re-checking after any tool rewrites this file, since the corruption is silent. |
 
 ---
 

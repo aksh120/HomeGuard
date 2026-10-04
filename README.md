@@ -158,14 +158,31 @@ remote visibility of queued events.
 
 ### 2. Apply the schema
 
-In the Supabase SQL editor, run in order:
+The authoritative copy of the schema is [`backend/schema.sql`](backend/schema.sql). For an existing
+database the ordered migrations in [`supabase/migrations/`](supabase/migrations) apply the changes
+incrementally.
+
+They live under `supabase/` rather than `backend/` because that is the only directory the Supabase
+CLI reads. Migrations kept in `backend/migrations` were silently invisible to `supabase db push`,
+which reported "Remote database is up to date" while the pending changes sat unapplied.
+
+For a brand-new database, run `backend/schema.sql` in the Supabase SQL editor, then mark the
+migrations as applied without re-running them:
+
+```
+supabase migration repair --status applied 20261002060629 20261002060630 \
+  20261002071530 20261002142224 --project-ref <project-ref>
+```
+
+For an existing database, push them in order:
 
 | File | Purpose |
 |---|---|
-| [`backend/schema.sql`](backend/schema.sql) | Tables, indexes, RLS policies |
-| [`backend/migrations/001_rls_ownership.sql`](backend/migrations/001_rls_ownership.sql) | Scopes RLS to `auth.uid()`. For an empty database. |
-| [`backend/migrations/001b_backfill_existing_rows.sql`](backend/migrations/001b_backfill_existing_rows.sql) | Only if you already have rows |
-| [`backend/migrations/002_monitoring_contacts.sql`](backend/migrations/002_monitoring_contacts.sql) | Caregiver contacts and status history |
+| [`20261002060629_rls_ownership.sql`](supabase/migrations/20261002060629_rls_ownership.sql) | Scopes RLS to `auth.uid()`. For an empty database. |
+| [`20261002060630_backfill_existing_rows.sql`](supabase/migrations/20261002060630_backfill_existing_rows.sql) | Only if you already have rows |
+| [`20261002071530_monitoring_contacts.sql`](supabase/migrations/20261002071530_monitoring_contacts.sql) | Caregiver contacts and status history |
+| [`20261002142224_households.sql`](supabase/migrations/20261002142224_households.sql) | Households, membership, and caregiver read access |
+| [`20261004130928_row_ownership_and_invite_lookup.sql`](supabase/migrations/20261004130928_row_ownership_and_invite_lookup.sql) | Assigns `user_id` and `household_id` on insert; invite-code lookup |
 
 ### 3. Enable Anonymous sign-ins
 
