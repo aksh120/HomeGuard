@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -20,6 +21,7 @@ import org.homeguard.core.model.CheckInSchedule
 import org.homeguard.core.model.ContactInfo
 import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.HomeInfo
+import org.homeguard.core.model.HouseholdRef
 import org.homeguard.core.model.MedicalInfo
 import org.homeguard.core.model.NightModeSchedule
 import org.homeguard.core.model.SafetyStatus
@@ -109,9 +111,13 @@ class PreferencesManager(private val context: Context) : AuthSessionStore {
         // Household sharing (sections 6B and 27)
         val KEY_HOUSEHOLD_ID = stringPreferencesKey("household_id")
         val KEY_HOUSEHOLD_INVITE_CODE = stringPreferencesKey("household_invite_code")
+        // Phase 2: a caregiver may watch several households, so membership becomes a set. The two
+        // single-value keys above are retained only to seed this on first read.
+        val KEY_HOUSEHOLDS = stringSetPreferencesKey("households")
 
         /** Separator for the persisted check-in time list. */
         private const val TIME_SEPARATOR = ","
+        private const val SEPARATOR = "|"
     }
 
     /**
@@ -232,10 +238,84 @@ class PreferencesManager(private val context: Context) : AuthSessionStore {
     }
 
     suspend fun setHousehold(householdId: String, inviteCode: String) {
-        dataStore.edit { prefs ->
-            prefs[KEY_HOUSEHOLD_ID] = householdId
-            prefs[KEY_HOUSEHOLD_INVITE_CODE] = inviteCode
+        addHousehold(HouseholdRef(id = householdId, inviteCode = inviteCode))
+    }
+
+    /**
+     * Every household this install belongs to.
+     *
+     * Decision D2 permits a caregiver to watch more than one house, so membership is a set rather
+     * than a single pair. Reads fall back to the pre-Phase-2 single-value keys so an install that
+     * already joined a household keeps watching it instead of silently losing it.
+     */
+    val householdsFlow: Flow<List<HouseholdRef>> = dataStore.data.map { prefs ->
+        val stored = (prefs[KEY_HOUSEHOLDS] ?: emptySet()).mapNotNull(::decodeHousehold)
+        if (stored.isNotEmpty()) {
+            stored.sortedBy { it.id }
+        } else {
+            val legacyId = prefs[KEY_HOUSEHOLD_ID]
+            if (legacyId.isNullOrBlank()) {
+                emptyList()
+            } else {
+                listOf(
+                    HouseholdRef(
+                        id = legacyId,
+                        inviteCode = prefs[KEY_HOUSEHOLD_INVITE_CODE].orEmpty()
+                    )
+                )
+            }
         }
+    }
+
+    /**
+     * Adds a household, or updates the stored name and code if it is already present.
+     *
+     * Idempotent by household id, because the resident's device creates its own household on every
+     * setup and re-joining on a second launch must not produce duplicates.
+     */
+    suspend fun addHousehold(household: HouseholdRef) {
+        if (household.id.isBlank()) return
+        dataStore.edit { prefs ->
+            val existing = (prefs[KEY_HOUSEHOLDS] ?: emptySet())
+                .mapNotNull(::decodeHousehold)
+                .associateBy { it.id }
+                .toMutableMap()
+            val previous = existing[household.id]
+            existing[household.id] = HouseholdRef(
+                id = household.id,
+                // Never downgrade a known name to blank, or to the invite code.
+                name = household.name.ifBlank { previous?.name.orEmpty() },
+                inviteCode = household.inviteCode.ifBlank { previous?.inviteCode.orEmpty() }
+            )
+            prefs[KEY_HOUSEHOLDS] = existing.values.map(::encodeHousehold).toSet()
+        }
+    }
+
+    suspend fun removeHousehold(householdId: String) {
+        dataStore.edit { prefs ->
+            val remaining = (prefs[KEY_HOUSEHOLDS] ?: emptySet())
+                .mapNotNull(::decodeHousehold)
+                .filterNot { it.id == householdId }
+            prefs[KEY_HOUSEHOLDS] = remaining.map(::encodeHousehold).toSet()
+        }
+    }
+
+    /**
+     * Encodes a household as `id|code`.
+     *
+     * A pipe is safe as a separator because neither component can contain one: ids are UUIDs and
+     * invite codes are drawn from a fixed alphanumeric alphabet. A structured format would need its
+     * own escaping rules for no benefit here.
+     */
+    private fun encodeHousehold(household: HouseholdRef): String =
+        "${household.id}$SEPARATOR${household.inviteCode}"
+
+    private fun decodeHousehold(raw: String): HouseholdRef? {
+        val parts = raw.split(SEPARATOR)
+        if (parts.size != 2) return null
+        val id = parts[0]
+        if (id.isBlank()) return null
+        return HouseholdRef(id = id, inviteCode = parts[1])
     }
 
     /**

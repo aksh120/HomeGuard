@@ -173,6 +173,10 @@
     <string name="caregiver_no_device_title">No device found</string>
     <string name="caregiver_no_device_body">This account is not sharing a home device yet. Check the invite code on the HomeGuard device at home.</string>
     <string name="caregiver_recent_activity">Recent activity</string>
+    <string name="caregiver_people_heading">People you are watching</string>
+    <string name="caregiver_add_person">Add another person</string>
+    <string name="caregiver_add_person_body">Enter the invite code from their HomeGuard phone. Everyone sharing that code appears here.</string>
+    <string name="common_cancel">Cancel</string>
     <string name="caregiver_no_activity">Nothing has been reported yet.</string>
     <string name="caregiver_emergency_alert">Emergency alert</string>
     <string name="caregiver_emergency_advice">Contact them now. If you cannot reach them, consider calling local emergency services.</string>
@@ -183,8 +187,8 @@
     <string name="caregiver_no_members">Only you are connected.</string>
     <string name="caregiver_role_protected">Device at home</string>
     <string name="caregiver_role_monitoring">Monitoring contact</string>
-    <string name="caregiver_emergency_row">Emergency alert</string>
-    <string name="caregiver_checkin_row">Safety check completed</string>
+    <string name="caregiver_emergency_row">Emergency alert — %1$s</string>
+    <string name="caregiver_checkin_row">Safety check completed — %1$s</string>
     <string name="caregiver_resolved">Resolved</string>
     <string name="dash">—</string>
 

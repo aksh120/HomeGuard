@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
@@ -28,23 +29,26 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.homeguard.R
-import org.homeguard.core.designsystem.theme.ActionEmergency
-import org.homeguard.core.designsystem.theme.ActionWarning
 import org.homeguard.core.designsystem.theme.StatusEmergency
 import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.designsystem.theme.StatusUnknown
+import org.homeguard.core.model.CaregiverActivity
+import org.homeguard.core.model.CaregiverAggregator
 import org.homeguard.core.model.HouseholdMember
-import org.homeguard.core.model.MonitoredDevice
 import org.homeguard.core.model.RemoteCheckIn
 import org.homeguard.core.model.RemoteEmergencyEvent
 import org.homeguard.core.model.SafetyStatus
+import org.homeguard.core.model.WatchedPerson
 import org.homeguard.ui.components.CyberBadge
 import org.homeguard.ui.components.CyberButton
 import org.homeguard.ui.components.CyberGlassCard
@@ -59,20 +63,31 @@ import java.util.Locale
  * Deliberately a different screen from the protected-device home, not a variant of it. A caregiver
  * cannot press "I'M OK", cannot trigger an SOS, and has no flashlight to control. They read, they
  * refresh, and they leave. Every action here is observational.
+ *
+ * Phase 2: built around a list of people rather than one device, per decision D2. One code covers a
+ * whole house, so the dashboard shows everyone in it and offers to add more by code.
  */
 @Composable
 fun CaregiverDashboardScreen(
     householdName: String,
-    device: MonitoredDevice?,
+    people: List<WatchedPerson>,
     members: List<HouseholdMember>,
     emergencyEvents: List<RemoteEmergencyEvent>,
     checkIns: List<RemoteCheckIn>,
     isRefreshing: Boolean,
     loadState: CaregiverLoadState,
     lastRefreshedAt: Long?,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onAddPerson: () -> Unit
 ) {
     val scrollState = rememberScrollState()
+
+    val openEmergencies = remember(emergencyEvents) {
+        emergencyEvents.filterNot { it.isResolved }
+    }
+    val feed = remember(people, checkIns, emergencyEvents) {
+        CaregiverAggregator.activityFeed(people, checkIns, emergencyEvents)
+    }
 
     Column(
         modifier = Modifier
@@ -86,16 +101,17 @@ fun CaregiverDashboardScreen(
             onBackClick = null
         )
 
-        // Unresolved emergency takes the top slot. A caregiver scanning this screen should not
-        // have to read past telemetry to see it.
-        val openEmergency = emergencyEvents.firstOrNull { !it.isResolved }
-        if (openEmergency != null) {
-            EmergencyBanner(openEmergency)
-            Spacer(modifier = Modifier.height(16.dp))
+        // Unresolved emergencies take the top slots, full width, naming who they belong to. A
+        // caregiver scanning this screen must not read past telemetry to see one, and must never
+        // have to guess which person it concerns.
+        openEmergencies.forEach { event ->
+            val person = people.firstOrNull { it.deviceId == event.deviceId }
+            EmergencyBanner(event, person?.device?.displayName.orEmpty())
+            Spacer(modifier = Modifier.height(12.dp))
         }
 
         when {
-            isRefreshing && device == null -> {
+            isRefreshing && people.isEmpty() -> {
                 Text(
                     text = stringResource(R.string.caregiver_loading),
                     fontSize = 17.sp,
@@ -103,7 +119,7 @@ fun CaregiverDashboardScreen(
                 )
             }
 
-            loadState is CaregiverLoadState.Error && device == null -> {
+            loadState is CaregiverLoadState.Error && people.isEmpty() -> {
                 CyberGlassCard(borderColor = StatusEmergency) {
                     Text(
                         text = stringResource(R.string.caregiver_load_failed),
@@ -121,7 +137,7 @@ fun CaregiverDashboardScreen(
                 }
             }
 
-            device == null -> {
+            people.isEmpty() -> {
                 CyberGlassCard {
                     Text(
                         text = stringResource(R.string.caregiver_no_device_title),
@@ -140,13 +156,33 @@ fun CaregiverDashboardScreen(
             }
 
             else -> {
-                DeviceStatusCard(device)
-                Spacer(modifier = Modifier.height(16.dp))
-                TelemetryCard(device, checkIns)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.caregiver_people_heading),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                people.forEachIndexed { index, person ->
+                    if (index > 0) Spacer(modifier = Modifier.height(12.dp))
+                    PersonCard(person)
+                }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        // Adding a person is one code. Keeping this prominent is the affordance for D2: a caregiver
+        // watching a second relative should never need to hunt through settings for it.
+        Spacer(modifier = Modifier.height(16.dp))
+        CyberButton(
+            text = stringResource(R.string.caregiver_add_person),
+            onClick = onAddPerson,
+            accentColor = MaterialTheme.colorScheme.primary,
+            icon = Icons.Default.PersonAdd
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         CyberButton(
             text = stringResource(R.string.caregiver_refresh),
@@ -179,7 +215,7 @@ fun CaregiverDashboardScreen(
             modifier = Modifier.padding(bottom = 8.dp)
         )
 
-        if (emergencyEvents.isEmpty() && checkIns.isEmpty()) {
+        if (feed.isEmpty()) {
             CyberGlassCard {
                 Text(
                     text = stringResource(R.string.caregiver_no_activity),
@@ -189,23 +225,32 @@ fun CaregiverDashboardScreen(
             }
         } else {
             CyberGlassCard {
-                emergencyEvents.take(6).forEach { event ->
-                    RemoteEventRow(
-                        headline = stringResource(R.string.caregiver_emergency_row),
-                        detail = event.details.ifBlank { formatRemoteTimestamp(event.triggeredAt) },
-                        timestamp = formatRemoteTimestamp(event.triggeredAt),
-                        isAlert = true,
-                        resolved = event.isResolved
-                    )
-                }
-                checkIns.take(6).forEach { checkIn ->
-                    RemoteEventRow(
-                        headline = stringResource(R.string.caregiver_checkin_row),
-                        detail = formatRemoteTimestamp(checkIn.confirmedAt),
-                        timestamp = formatRemoteTimestamp(checkIn.confirmedAt),
-                        isAlert = false,
-                        resolved = false
-                    )
+                feed.forEach { item ->
+                    when (item) {
+                        is CaregiverActivity.Emergency -> RemoteEventRow(
+                            headline = stringResource(
+                                R.string.caregiver_emergency_row,
+                                item.personName
+                            ),
+                            detail = item.event.details.ifBlank {
+                                formatRemoteTimestamp(item.event.triggeredAt)
+                            },
+                            timestamp = formatRemoteTimestamp(item.event.triggeredAt),
+                            isAlert = true,
+                            resolved = item.event.isResolved
+                        )
+
+                        is CaregiverActivity.CheckIn -> RemoteEventRow(
+                            headline = stringResource(
+                                R.string.caregiver_checkin_row,
+                                item.personName
+                            ),
+                            detail = formatRemoteTimestamp(item.checkIn.confirmedAt),
+                            timestamp = formatRemoteTimestamp(item.checkIn.confirmedAt),
+                            isAlert = false,
+                            resolved = false
+                        )
+                    }
                 }
             }
         }
@@ -261,7 +306,7 @@ fun CaregiverDashboardScreen(
 
 /** Prominent, unmissable banner for an emergency nobody has resolved yet. */
 @Composable
-private fun EmergencyBanner(event: RemoteEmergencyEvent) {
+private fun EmergencyBanner(event: RemoteEmergencyEvent, personName: String) {
     Surface(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.error,
@@ -280,6 +325,16 @@ private fun EmergencyBanner(event: RemoteEmergencyEvent) {
                     text = stringResource(R.string.caregiver_emergency_alert),
                     fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onError
+                )
+            }
+            // Named explicitly. In a multi-person household an unattributed alarm is unactionable.
+            if (personName.isNotBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = personName,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onError
                 )
             }
@@ -309,14 +364,22 @@ private fun EmergencyBanner(event: RemoteEmergencyEvent) {
     }
 }
 
+/**
+ * One watched person: status, battery, network, last seen, and their own last check-in.
+ *
+ * Per-person rather than household-wide. The previous single card showed whichever device happened
+ * to be first alongside every check-in in the household, so with two people the readings belonged
+ * to different devices.
+ */
 @Composable
-private fun DeviceStatusCard(device: MonitoredDevice) {
+private fun PersonCard(person: WatchedPerson) {
+    val device = person.device
     val now = System.currentTimeMillis()
     val stale = device.isStale(now)
 
     // Section 19: a silent device is UNKNOWN, never EMERGENCY.
     val effective = when {
-        device.safety == SafetyStatus.EMERGENCY -> SafetyStatus.EMERGENCY
+        person.hasOpenEmergency || device.safety == SafetyStatus.EMERGENCY -> SafetyStatus.EMERGENCY
         stale -> SafetyStatus.UNKNOWN
         else -> device.safety
     }
@@ -326,9 +389,33 @@ private fun DeviceStatusCard(device: MonitoredDevice) {
         SafetyStatus.EMERGENCY -> stringResource(R.string.status_emergency) to StatusEmergency
     }
 
+    val spoken = buildString {
+        append(device.displayName)
+        append(". ")
+        append(label)
+        append(". ")
+        append(
+            if (device.batteryLevel >= 0) {
+                stringResource(R.string.battery_percent, device.batteryLevel)
+            } else {
+                stringResource(R.string.dash)
+            }
+        )
+        append(". ")
+        append(
+            if (device.isInternetAvailable) {
+                stringResource(R.string.dashboard_online)
+            } else {
+                stringResource(R.string.dashboard_offline)
+            }
+        )
+    }
+
     CyberGlassCard(borderColor = color) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = spoken },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -351,8 +438,54 @@ private fun DeviceStatusCard(device: MonitoredDevice) {
             CyberBadge(text = label, color = color)
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        PersonMetric(
+            icon = Icons.Default.Bolt,
+            label = stringResource(R.string.common_battery),
+            value = if (device.batteryLevel >= 0) {
+                stringResource(R.string.battery_percent, device.batteryLevel)
+            } else {
+                stringResource(R.string.dash)
+            },
+            valueColor = if (device.batteryLevel in 0..20) StatusEmergency else null,
+            footnote = if (device.isCharging) {
+                stringResource(R.string.battery_charging)
+            } else {
+                stringResource(R.string.battery_not_charging)
+            }
+        )
+
+        PersonMetric(
+            icon = if (device.isInternetAvailable) Icons.Default.Wifi else Icons.Default.WifiOff,
+            label = stringResource(R.string.common_network),
+            value = if (device.isInternetAvailable) {
+                stringResource(R.string.dashboard_online)
+            } else {
+                stringResource(R.string.dashboard_offline)
+            },
+            valueColor = if (device.isInternetAvailable) StatusSafe else StatusUnknown
+        )
+
+        PersonMetric(
+            icon = Icons.Default.Sensors,
+            label = stringResource(R.string.caregiver_last_seen),
+            value = if (device.hasReported) {
+                formatRemoteTimestamp(device.lastSeenAt)
+            } else {
+                stringResource(R.string.dash)
+            }
+        )
+
+        PersonMetric(
+            icon = Icons.Default.Warning,
+            label = stringResource(R.string.caregiver_last_checkin),
+            value = person.lastCheckInAt?.let { formatRemoteTimestamp(it) }
+                ?: stringResource(R.string.dash)
+        )
+
         if (stale) {
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(
                     imageVector = Icons.Default.Warning,
@@ -372,150 +505,48 @@ private fun DeviceStatusCard(device: MonitoredDevice) {
     }
 }
 
+/** One labelled reading inside a person card. */
 @Composable
-private fun TelemetryCard(
-    device: MonitoredDevice,
-    checkIns: List<RemoteCheckIn>
+private fun PersonMetric(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    valueColor: androidx.compose.ui.graphics.Color? = null,
+    footnote: String? = null
 ) {
-    CyberGlassCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Bolt,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(
+            text = label,
+            fontSize = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        Column(horizontalAlignment = Alignment.End) {
             Text(
-                text = stringResource(R.string.common_battery),
+                text = value,
                 fontSize = 17.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
+                fontWeight = FontWeight.SemiBold,
+                color = valueColor ?: MaterialTheme.colorScheme.onSurface
             )
-            Column(horizontalAlignment = Alignment.End) {
+            if (footnote != null) {
                 Text(
-                    text = if (device.batteryLevel >= 0) {
-                        stringResource(R.string.battery_percent, device.batteryLevel)
-                    } else {
-                        stringResource(R.string.dash)
-                    },
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (device.batteryLevel in 0..20) {
-                        StatusEmergency
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    }
-                )
-                Text(
-                    text = if (device.isCharging) {
-                        stringResource(R.string.battery_charging)
-                    } else {
-                        stringResource(R.string.battery_not_charging)
-                    },
+                    text = footnote,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = if (device.isInternetAvailable) {
-                    Icons.Default.Wifi
-                } else {
-                    Icons.Default.WifiOff
-                },
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                text = stringResource(R.string.common_network),
-                fontSize = 17.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = if (device.isInternetAvailable) {
-                    stringResource(R.string.dashboard_online)
-                } else {
-                    stringResource(R.string.dashboard_offline)
-                },
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = if (device.isInternetAvailable) {
-                    StatusSafe
-                } else {
-                    StatusUnknown
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Sensors,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                text = stringResource(R.string.caregiver_last_seen),
-                fontSize = 17.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = if (device.hasReported) {
-                    formatRemoteTimestamp(device.lastSeenAt)
-                } else {
-                    stringResource(R.string.dash)
-                },
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.Warning,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(14.dp))
-            Text(
-                text = stringResource(R.string.caregiver_last_checkin),
-                fontSize = 17.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Text(
-                text = checkIns.firstOrNull()?.let { formatRemoteTimestamp(it.confirmedAt) }
-                    ?: stringResource(R.string.dash),
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
         }
     }
 }
@@ -538,7 +569,7 @@ private fun RemoteEventRow(
                 text = headline,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = if (isAlert) ActionEmergency else MaterialTheme.colorScheme.onSurface
+                color = if (isAlert) StatusEmergency else MaterialTheme.colorScheme.onSurface
             )
             Text(
                 text = detail,

@@ -28,13 +28,17 @@ import org.homeguard.core.data.SafetyRepository
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.AppProfile
+import org.homeguard.core.model.CaregiverAggregator
 import org.homeguard.core.model.DeviceMode
+import org.homeguard.core.model.Household
 import org.homeguard.core.model.HouseholdMember
+import org.homeguard.core.model.HouseholdRef
 import org.homeguard.core.model.MonitoredDevice
 import org.homeguard.core.model.RemoteCheckIn
 import org.homeguard.core.model.RemoteEmergencyEvent
 import org.homeguard.core.model.SafetyStatus
 import org.homeguard.core.model.SyncHealth
+import org.homeguard.core.model.WatchedPerson
 import org.homeguard.core.notifications.SafetyNotifier
 import org.homeguard.core.sensors.FallAndMotionDetector
 import org.homeguard.core.sync.SyncWorker
@@ -196,10 +200,11 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         observeMissedCheckIn()
 
         viewModelScope.launch {
-            val stored = preferencesManager.householdFlow.first()
-            _householdId.value = stored.first
-            _householdInviteCode.value = stored.second
-            if (!stored.first.isNullOrBlank()) {
+            val stored = preferencesManager.householdsFlow.first()
+            _households.value = stored
+            _householdId.value = stored.firstOrNull()?.id
+            _householdInviteCode.value = stored.firstOrNull()?.inviteCode
+            if (stored.isNotEmpty()) {
                 refreshMonitoring()
             }
         }
@@ -531,8 +536,27 @@ fun switchToProtectedProfile() {
     private val _householdInviteCode = MutableStateFlow<String?>(null)
     val householdInviteCode: StateFlow<String?> = _householdInviteCode.asStateFlow()
 
+    /**
+     * Every household this install belongs to.
+     *
+     * Phase 2 / decision D2: a caregiver may watch more than one house, so this is a list. Empty
+     * means the caregiver has not entered a code yet and should be shown onboarding rather than a
+     * dashboard.
+     */
+    private val _households = MutableStateFlow<List<HouseholdRef>>(emptyList())
+    val households: StateFlow<List<HouseholdRef>> = _households.asStateFlow()
+
     private val _monitoredDevice = MutableStateFlow<MonitoredDevice?>(null)
     val monitoredDevice: StateFlow<MonitoredDevice?> = _monitoredDevice.asStateFlow()
+
+    /**
+     * Everyone this caregiver watches, already grouped and ordered by CaregiverAggregator.
+     *
+     * The dashboard used to take a single device, which is why it could only ever show one person
+     * no matter how many were in the household.
+     */
+    private val _watchedPeople = MutableStateFlow<List<WatchedPerson>>(emptyList())
+    val watchedPeople: StateFlow<List<WatchedPerson>> = _watchedPeople.asStateFlow()
 
     private val _householdMembers = MutableStateFlow<List<HouseholdMember>>(emptyList())
     val householdMembers: StateFlow<List<HouseholdMember>> = _householdMembers.asStateFlow()
@@ -564,10 +588,10 @@ fun switchToProtectedProfile() {
     fun createHousehold(name: String) {
         viewModelScope.launch {
             _householdError.value = null
-            val existing = preferencesManager.householdFlow.first()
-            if (existing.first != null) {
-                _householdId.value = existing.first
-                _householdInviteCode.value = existing.second
+            val existing = _households.value.firstOrNull()
+            if (existing != null) {
+                _householdId.value = existing.id
+                _householdInviteCode.value = existing.inviteCode
                 return@launch
             }
             val remote = container.monitoringRemoteDataSource
@@ -576,9 +600,7 @@ fun switchToProtectedProfile() {
                     val deviceId = preferencesManager.ensureDeviceId()
                     remote.attachDeviceToHousehold(household.id, deviceId)
                     remote.joinHousehold(household.id, deviceId, "PROTECTED")
-                    preferencesManager.setHousehold(household.id, household.inviteCode)
-                    _householdId.value = household.id
-                    _householdInviteCode.value = household.inviteCode
+                    rememberHousehold(household)
                     // Publish the household id on future writes so caregivers can find the device.
                     publishHouseholdToEvents(household.id)
                 }
@@ -588,12 +610,27 @@ fun switchToProtectedProfile() {
         }
     }
 
+    /** Stamps the household id onto this device so caregivers can find it. */
     private suspend fun publishHouseholdToEvents(householdId: String) {
         val deviceId = preferencesManager.ensureDeviceId()
         container.remoteSyncDataSource.sendHouseholdId(householdId, deviceId)
     }
 
-    /** Joins an existing household using the code shown on the home device. */
+    /** Records a household locally and keeps the legacy single-value mirror in step. */
+    private suspend fun rememberHousehold(household: Household) {
+        val ref = HouseholdRef(id = household.id, name = household.name, inviteCode = household.inviteCode)
+        preferencesManager.addHousehold(ref)
+        _households.value = preferencesManager.householdsFlow.first()
+        _householdId.value = _households.value.firstOrNull()?.id
+        _householdInviteCode.value = _households.value.firstOrNull()?.inviteCode
+    }
+
+    /**
+     * Joins an existing household using the code shown on the home device.
+     *
+     * Phase 2: also the "add another person" path. Joining a second code must add to the list
+     * rather than replace the only one, which is the whole point of decision D2.
+     */
     fun joinHousehold(inviteCode: String) {
         viewModelScope.launch {
             _householdError.value = null
@@ -616,9 +653,7 @@ fun switchToProtectedProfile() {
                                 _householdError.value = it.message
                             }
                         }
-                    preferencesManager.setHousehold(household.id, household.inviteCode)
-                    _householdId.value = household.id
-                    _householdInviteCode.value = household.inviteCode
+                    rememberHousehold(household)
                     refreshMonitoring()
                 }
                 .onFailure {
@@ -629,33 +664,75 @@ fun switchToProtectedProfile() {
     }
 
     /**
-     * Reloads everything the caregiver dashboard shows.
+     * Stops watching a household.
+     *
+     * Removing membership is a Phase 3 approval flow on the protected phone, so this only clears
+     * local state. The remote membership row is left in place deliberately: unilaterally deleting
+     * it here would bypass the consent check Phase 3 adds.
+     */
+    fun forgetHousehold(householdId: String) {
+        viewModelScope.launch {
+            preferencesManager.removeHousehold(householdId)
+            _households.value = preferencesManager.householdsFlow.first()
+            _householdId.value = _households.value.firstOrNull()?.id
+            _householdInviteCode.value = _households.value.firstOrNull()?.inviteCode
+            refreshMonitoring()
+        }
+    }
+
+    /**
+     * Reloads everything the caregiver dashboard shows, across every joined household.
      *
      * Section 27 wants current status, last check-in, online state, battery, internet, and recent
-     * events. Each is read independently so one failing query does not blank the whole screen.
+     * events. Each query is per household and each is read independently, so one household failing
+     * does not blank the others and one failing query does not blank the screen.
      */
     fun refreshMonitoring() {
-        val householdId = _householdId.value
-        if (householdId.isNullOrBlank()) {
+        val joined = _households.value
+        if (joined.isEmpty()) {
             _caregiverLoadState.value = CaregiverLoadState.Error("No household connected")
+            _watchedPeople.value = emptyList()
+            _monitoredDevice.value = null
             return
         }
         viewModelScope.launch {
             _isRefreshingMonitoring.value = true
             val remote = container.monitoringRemoteDataSource
 
-            val devices = remote.listDevices(householdId)
-            val emergencies = remote.listEmergencyEvents(householdId)
-            val checkIns = remote.listCheckIns(householdId)
-            val members = remote.listMembers(householdId)
+            var firstError: Throwable? = null
+            val devices = mutableListOf<MonitoredDevice>()
+            val emergencies = mutableListOf<RemoteEmergencyEvent>()
+            val checkIns = mutableListOf<RemoteCheckIn>()
+            val members = mutableListOf<HouseholdMember>()
 
-            val firstError = listOf(devices, emergencies, checkIns, members)
-                .firstNotNullOfOrNull { (it as? Result<*>)?.exceptionOrNull() }
+            for (household in joined) {
+                // Sequential rather than concurrent: every request shares one auth session, and
+                // firing four per household at once is how the sign-up rate limit was reached in
+                // the first place.
+                remote.listDevices(household.id).fold(
+                    onSuccess = { devices += it },
+                    onFailure = { firstError = firstError ?: it }
+                )
+                remote.listEmergencyEvents(household.id).fold(
+                    onSuccess = { emergencies += it },
+                    onFailure = { firstError = firstError ?: it }
+                )
+                remote.listCheckIns(household.id).fold(
+                    onSuccess = { checkIns += it },
+                    onFailure = { firstError = firstError ?: it }
+                )
+                remote.listMembers(household.id).fold(
+                    onSuccess = { members += it },
+                    onFailure = { firstError = firstError ?: it }
+                )
+            }
 
-            _monitoredDevice.value = devices.getOrNull()?.firstOrNull { it.deviceMode != "MONITORING_DEVICE" }
-            _remoteEmergencies.value = emergencies.getOrDefault(emptyList())
-            _remoteCheckIns.value = checkIns.getOrDefault(emptyList())
-            _householdMembers.value = members.getOrDefault(emptyList())
+            _remoteEmergencies.value = emergencies
+            _remoteCheckIns.value = checkIns
+            _householdMembers.value = members
+            _watchedPeople.value = CaregiverAggregator.watchedPeople(devices, checkIns, emergencies)
+            // Kept for the single-device call sites; the dashboard now uses watchedPeople.
+            _monitoredDevice.value = _watchedPeople.value.firstOrNull()?.device
             _lastMonitoringRefresh.value = System.currentTimeMillis()
 
             _caregiverLoadState.value = if (firstError != null) {

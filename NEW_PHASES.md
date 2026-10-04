@@ -555,15 +555,40 @@ HTTP 429
 
 ### Phase 2 — Multi-person caregiver dashboard
 
-**Work:**
-- `householdIds: List<String>` and `devices: List<MonitoredDevice>` replace the singles (D-4)
-- Order: unresolved emergency first and full-width, then the people list
-- Prominent **"Add another person"** that asks for a code — the affordance for D2
-- Per person: status, last seen, last check-in, battery, connectivity
-- Cross-device activity feed, live over Supabase Realtime (D10)
-- Call action
+**Status: done.** Committed on top of Phase 1.
 
-**Done when:** one code shows every watched person, and adding a second takes only a code.
+**Work:**
+- `households: List<HouseholdRef>` and `watchedPeople: List<WatchedPerson>` replace the single
+  household id and single device (D-4). Household membership is now a persisted set, so a caregiver
+  can watch more than one house
+- `refreshMonitoring()` iterates every joined household and aggregates across them. Queries run
+  **sequentially**, not concurrently: they share one auth session, and firing four per household at
+  once is how the sign-up rate limit was reached originally
+- `CaregiverAggregator` resolves each person's own latest check-in and open emergency. Previously the
+  dashboard paired the first device with the household's whole check-in list, so with two people in
+  a house it showed one person's status beside the other person's check-in
+- Dashboard rebuilt around a people list: unresolved emergencies full-width and named, then one
+  `PersonCard` per person with status, battery, network, last seen and last check-in
+- Activity feed merged across devices, newest first, with each row naming its person
+- "Add another person" — a prominent button opening `AddPersonDialog`, which is only a code field.
+  That is the whole affordance D2 needs: one house is one code, so the only thing a caregiver can
+  legitimately add is another house's code
+- Household name shown instead of the invite code (Q1). The code is a credential that gets read
+  aloud, screenshotted and texted; it was being used as a label
+
+**Done when:** one code shows every watched person, and adding a second takes only a code. ✅
+
+**Two items deliberately not built:**
+
+- **Call action.** There is no phone number for a watched person anywhere in the schema. `devices`
+  carries only `person_name` and `person_role`; `monitoring_contacts` holds the *resident's*
+  registered contacts, which for a caregiver is their own details. A Call button would therefore
+  place a call to the caregiver themselves. Shipping a dead button is worse than shipping none, so
+  it is deferred pending a decision on how a person is reachable — see §11 Q5.
+- **Realtime live updates.** No WebSocket client is present and adding one is a dependency this
+  project has deliberately avoided so far. Manual refresh satisfies this phase's done-when. Still
+  wanted, and still the right home for it (D10); deferred rather than dropped.
+
 **Risk:** low. **Needs the developer:** no.
 
 ### Phase 3 — Approval codes
@@ -705,6 +730,7 @@ given, so none of them blocks starting Phase 0.
 | Q2 | Can a caregiver belong to more than one household in the app UI at once, or switch between them? | Support the list; default to showing all households' people in one feed. The schema already permits it. |
 | Q3 | Should the caregiver be able to resolve/dismiss an emergency from the dashboard? | Yes — but only the device owner may mark a `remote_commands` row `EXECUTED`; a caregiver resolving an alert is a UI-side state, not a server write. |
 | Q4 | Does the protected phone need a visible "monitored by" indicator at all times? | Yes. Required by D4's transparency principle and already implied by Phase 3. |
+| Q5 | **How is a watched person reached by phone?** Phase 2's Call action was deferred because no phone number for a watched person exists anywhere in the schema, and `monitoring_contacts` holds the resident's contacts — which for a caregiver is their own details. | Needs a decision before it can be built: add `contact_phone` to `devices` and an input on the protected profile, or point Call at a shared contact list instead. |
 
 ---
 
@@ -771,3 +797,5 @@ Plus, specific to this roadmap:
 | Date | Change |
 |---|---|
 | 2026-10-04 | Initial roadmap. Recorded decisions D1–D10, platform decision Supabase+FCM, defects D-1…D-11, schema inventory, remote SOS design, seven-phase plan. |
+| 2026-10-04 | Phase 1 and Phase 0 completed. Recorded the migration-directory bug (L10) and the corrupted `local.properties` URL (L11). Migration 004 still unapplied. |
+| 2026-10-04 | Phase 2 completed: multi-person dashboard, per-person check-in resolution, household set, add-another-person by code, household name replacing the invite code. Recorded Q5 for the deferred Call action. |
