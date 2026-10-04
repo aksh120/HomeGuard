@@ -186,6 +186,15 @@
     <string name="caregiver_resolved">Resolved</string>
     <string name="dash">—</string>
 
+    <!-- First-run profile fork (Phase 1, decision D1) -->
+    <string name="profile_choice_title">How will you use HomeGuard?</string>
+    <string name="profile_choice_subtitle">Choose the option that describes this phone. You can only change this later with help from the other person.</string>
+    <string name="profile_choice_protected_title">This phone stays at home</string>
+    <string name="profile_choice_protected_body">For someone who needs help. Set up an emergency button, check-ins, and details to share with helpers.</string>
+    <string name="profile_choice_monitoring_title">I am watching someone else</string>
+    <string name="profile_choice_monitoring_body">For a caregiver. See their safety status and get alerts. This phone will not raise alerts of its own.</string>
+    <string name="profile_choice_note">HomeGuard only asks for contacts and health details on the phone that stays at home. A monitoring phone needs nothing but the invite code.</string>
+
     <!-- Caregiver onboarding -->
     <string name="monitor_setup_title">Connect to a home device</string>
     <string name="monitor_setup_body">Enter the invite code shown on the HomeGuard device at home. You will see its safety status and any alerts, but you cannot trigger anything on it.</string>

@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,7 +40,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -54,7 +52,6 @@ import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.BatteryThresholds
 import org.homeguard.core.model.CheckInSchedule
 import org.homeguard.core.model.ContactInfo
-import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.HomeInfo
 import org.homeguard.core.model.MedicalInfo
 import org.homeguard.core.model.NightModeSchedule
@@ -63,10 +60,13 @@ import org.homeguard.ui.components.CyberGlassCard
 import org.homeguard.ui.components.CyberTopAppBar
 
 /**
- * Setup and settings.
+ * Protected-device setup and settings.
  *
- * Serves both roles: first-run configuration (section 9) and later editing. Every field is optional
- * and nothing is pre-filled, per section 50.
+ * Resident profile only. The role toggle that used to live here is gone: the profile is chosen once
+ * at first run (RoleSelectionScreen) and Phase 3 governs any later change, because converting a
+ * resident's phone into a monitoring phone without consent is not a settings edit.
+ *
+ * Every field is optional and nothing is pre-filled, per section 50.
  */
 @Composable
 fun SetupAndSettingsScreen(
@@ -77,7 +77,6 @@ fun SetupAndSettingsScreen(
 ) {
     val scrollState = rememberScrollState()
 
-    var deviceMode by remember { mutableStateOf(currentConfig.deviceMode) }
     var personName by remember { mutableStateOf(currentConfig.personName) }
     var personRole by remember { mutableStateOf(currentConfig.personRole) }
 
@@ -144,29 +143,6 @@ fun SetupAndSettingsScreen(
             },
             onBackClick = if (!isInitialSetup) onBackClick else null
         )
-
-        FormSection(icon = Icons.Default.Shield, title = stringResource(R.string.setup_operational_role))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            ModeSelectorTile(
-                title = stringResource(R.string.setup_mode_protected_title),
-                subtitle = stringResource(R.string.setup_mode_protected_sub),
-                isSelected = deviceMode == DeviceMode.PROTECTED_DEVICE,
-                onSelect = { deviceMode = DeviceMode.PROTECTED_DEVICE },
-                modifier = Modifier.weight(1f)
-            )
-            ModeSelectorTile(
-                title = stringResource(R.string.setup_mode_monitoring_title),
-                subtitle = stringResource(R.string.setup_mode_monitoring_sub),
-                isSelected = deviceMode == DeviceMode.MONITORING_DEVICE,
-                onSelect = { deviceMode = DeviceMode.MONITORING_DEVICE },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
 
         FormSection(icon = Icons.Default.Person, title = stringResource(R.string.setup_resident_profile))
         CyberGlassCard {
@@ -470,7 +446,6 @@ fun SetupAndSettingsScreen(
                 onSaveConfig(
                     currentConfig.copy(
                         isSetupComplete = true,
-                        deviceMode = deviceMode,
                         personName = personName,
                         personRole = personRole,
                         primaryContact = ContactInfo(
@@ -550,44 +525,6 @@ private fun FormSection(icon: ImageVector, title: String) {
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface
         )
-    }
-}
-
-@Composable
-private fun ModeSelectorTile(
-    title: String,
-    subtitle: String,
-    isSelected: Boolean,
-    onSelect: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    OutlinedButton(
-        onClick = onSelect,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(80.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors(
-            containerColor = if (isSelected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                Color.Transparent
-            }
-        )
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = title,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = subtitle,
-                fontSize = 14.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
     }
 }
 

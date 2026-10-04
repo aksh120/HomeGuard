@@ -10,7 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import org.homeguard.core.model.DeviceMode
+import org.homeguard.core.model.AppProfile
 import org.homeguard.ui.screens.CaregiverDashboardScreen
 import org.homeguard.ui.screens.EmergencyActiveScreen
 import org.homeguard.ui.screens.EmergencyCountdownScreen
@@ -21,6 +21,7 @@ import org.homeguard.ui.screens.MonitorJoinScreen
 import org.homeguard.ui.screens.NightModeScreen
 import org.homeguard.ui.screens.PowerCutScreen
 import org.homeguard.ui.screens.ProtectedHomeScreen
+import org.homeguard.ui.screens.RoleSelectionScreen
 import org.homeguard.ui.screens.SetupAndSettingsScreen
 
 @Composable
@@ -57,7 +58,8 @@ fun HomeGuardApp(
     val lastMonitoringRefresh by viewModel.lastMonitoringRefresh.collectAsState()
     val householdError by viewModel.householdError.collectAsState()
 
-    val isMonitoringDevice = appConfig.deviceMode == DeviceMode.MONITORING_DEVICE
+    val profile = appConfig.profile
+    val isMonitoringDevice = profile == AppProfile.MONITORING
 
     // Torch needs a runtime CAMERA grant; ask only when the user actually toggles it.
     val onFlashlightClick = {
@@ -72,6 +74,8 @@ fun HomeGuardApp(
         when (currentDestination) {
             NavigationDestination.EmergencyCountdown -> viewModel.cancelEmergencyCountdown()
             NavigationDestination.EmergencyActive -> viewModel.stopAlarmAndResolve()
+            // Nothing lies behind the first-run fork, so there is nowhere to go back to.
+            NavigationDestination.ProfileSelection -> Unit
             NavigationDestination.Setup -> {
                 // Do not leave an incomplete setup; there is nothing behind it.
                 if (appConfig.isSetupComplete) {
@@ -82,18 +86,26 @@ fun HomeGuardApp(
         }
     }
 
+    // Nothing is reachable until a profile is chosen. This is the first fork of the two experiences.
+    if (profile == null) {
+        RoleSelectionScreen(onSelectProfile = viewModel::selectProfile)
+        return
+    }
+
     // A monitoring device never shows the protected-device home. It has no SOS, no check-in and no
     // flashlight to offer, so presenting that screen would be misleading in both directions.
     if (isMonitoringDevice) {
-        if (householdInviteCode == null && currentDestination == NavigationDestination.Home) {
+        // The join screen is shown whenever there is no household yet, regardless of destination.
+        // It used to require destination == Home, which made it unreachable: a fresh install opens
+        // on ProfileSelection or Setup, so the condition never held and the caregiver was dropped
+        // straight onto an empty dashboard.
+        if (householdInviteCode == null) {
             MonitorJoinScreen(
                 isJoining = isRefreshingMonitoring,
                 errorMessage = householdError,
                 onJoin = viewModel::joinHousehold,
                 onDismissError = viewModel::dismissHouseholdError,
-                onSwitchToProtected = {
-                    viewModel.saveConfig(appConfig.copy(deviceMode = DeviceMode.PROTECTED_DEVICE))
-                }
+                onSwitchToProtected = { viewModel.switchToProtectedProfile() }
             )
         } else {
             Surface(
@@ -228,6 +240,10 @@ fun HomeGuardApp(
                     onSaveConfig = { updated -> viewModel.saveConfig(updated) },
                     onBackClick = { viewModel.navigateTo(NavigationDestination.Home) }
                 )
+            }
+
+            NavigationDestination.ProfileSelection -> {
+                RoleSelectionScreen(onSelectProfile = viewModel::selectProfile)
             }
         }
     }

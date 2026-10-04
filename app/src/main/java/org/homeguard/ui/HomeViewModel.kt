@@ -27,6 +27,8 @@ import org.homeguard.core.data.MonitoringRemoteDataSource
 import org.homeguard.core.data.SafetyRepository
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.model.AppConfig
+import org.homeguard.core.model.AppProfile
+import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.HouseholdMember
 import org.homeguard.core.model.MonitoredDevice
 import org.homeguard.core.model.RemoteCheckIn
@@ -41,19 +43,6 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
-
-sealed class NavigationDestination {
-    data object Home : NavigationDestination()
-    data object EmergencyCountdown : NavigationDestination()
-    data object EmergencyActive : NavigationDestination()
-    data object NightMode : NavigationDestination()
-    data object PowerCut : NavigationDestination()
-    data object EmergencyInfo : NavigationDestination()
-    data object FireGuide : NavigationDestination()
-    data object MonitoringDashboard : NavigationDestination()
-    data object Settings : NavigationDestination()
-    data object Setup : NavigationDestination()
-}
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -163,12 +152,18 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             preferencesManager.appConfigFlow.collect { config ->
-                if (!config.isSetupComplete &&
-                    _currentDestination.value == NavigationDestination.Home
-                ) {
-                    _currentDestination.value = NavigationDestination.Setup
+                val entry = ProfileRouting.entryDestination(config.profile, config.isSetupComplete)
+                // Only steer on first arrival. Once the user has moved, leaving their choice alone
+                // matters more than re-asserting the entry rule on every config emission.
+                val stillAtEntry = _currentDestination.value == NavigationDestination.Home ||
+                    _currentDestination.value == NavigationDestination.Setup ||
+                    _currentDestination.value == NavigationDestination.ProfileSelection
+                if (!ProfileRouting.isReachable(config.profile, _currentDestination.value) || stillAtEntry) {
+                    _currentDestination.value = entry
                 }
-                if (!config.hasAcknowledgedSafetyNotice && config.isSetupComplete) {
+                if (!config.hasAcknowledgedSafetyNotice && config.isSetupComplete &&
+                    config.profile == AppProfile.PROTECTED
+                ) {
                     _safetyNoticeVisible.value = true
                 }
             }
@@ -310,8 +305,88 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { preferencesManager.acknowledgeSafetyNotice() }
     }
 
+    /**
+     * Monitoring to protected, offered from the join screen.
+     *
+ * Decision D4: this direction needs no approval, because there is no counterparty in the household
+ * being disarmed by it. The reverse direction is deliberately absent here — it requires caregiver
+ * approval and lands in Phase 3.
+     *
+     * Setup is re-run rather than skipped, because the new resident's own contacts and medical
+     * details have to be entered. The household is left in place for now; offering to leave it is
+     * Phase 2 work, once the dashboard can show membership.
+ */
+fun switchToProtectedProfile() {
+        viewModelScope.launch {
+            preferencesManager.saveConfig(
+                appConfig.value.copy(
+                    profile = AppProfile.PROTECTED,
+                    isSetupComplete = false
+                )
+            )
+            val deviceId = preferencesManager.ensureDeviceId()
+            container.remoteSyncDataSource.registerDevice(
+                deviceId = deviceId,
+                deviceMode = DeviceMode.PROTECTED_DEVICE.name,
+                personName = appConfig.value.personName,
+                personRole = appConfig.value.personRole
+            )
+            _currentDestination.value = NavigationDestination.Setup
+        }
+    }
+
+    /**
+     * Moves to [dest] only if the current profile is allowed there.
+     *
+     * Rejecting rather than silently correcting keeps the destination flow honest: a caller that
+     * asks for a screen this profile must not have is a bug, and swallowing it would hide that.
+     */
     fun navigateTo(dest: NavigationDestination) {
+        val profile = appConfig.value.profile
+        if (!ProfileRouting.isReachable(profile, dest)) {
+            android.util.Log.w(
+                "HomeGuard",
+                "Blocked ${profile ?: "unselected"} profile from reaching $dest"
+            )
+            return
+        }
         _currentDestination.value = dest
+    }
+
+    /**
+     * Records the first-run profile choice and routes accordingly.
+     *
+     * Choosing the monitoring profile completes setup immediately: there is no protected form to
+     * fill, because this phone will never raise an alert. The caregiver goes straight to the join
+     * screen. Choosing the resident profile opens the protected form.
+     */
+    fun selectProfile(profile: AppProfile) {
+        viewModelScope.launch {
+            val config = appConfig.value
+            val isMonitoring = profile == AppProfile.MONITORING
+            preferencesManager.saveConfig(
+                config.copy(
+                    profile = profile,
+                    isSetupComplete = isMonitoring || config.isSetupComplete
+                )
+            )
+            if (isMonitoring) {
+                // Backends see the device as a monitoring device immediately, so a caregiver
+                // reading the device list does not briefly see it as an unconfigured resident phone.
+                val deviceId = preferencesManager.ensureDeviceId()
+                container.remoteSyncDataSource.registerDevice(
+                    deviceId = deviceId,
+                    deviceMode = DeviceMode.MONITORING_DEVICE.name,
+                    personName = config.personName,
+                    personRole = config.personRole
+                )
+            }
+            _currentDestination.value = if (isMonitoring) {
+                NavigationDestination.Home
+            } else {
+                NavigationDestination.Setup
+            }
+        }
     }
 
     fun confirmCheckIn() {

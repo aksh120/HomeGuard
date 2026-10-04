@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.homeguard.core.model.AppConfig
+import org.homeguard.core.model.AppProfile
 import org.homeguard.core.model.BatteryThresholds
 import org.homeguard.core.model.CheckInSchedule
 import org.homeguard.core.model.ContactInfo
@@ -34,6 +35,9 @@ class PreferencesManager(private val context: Context) {
     companion object {
         val KEY_SETUP_COMPLETE = booleanPreferencesKey("is_setup_complete")
         val KEY_DEVICE_MODE = stringPreferencesKey("device_mode")
+        // Phase 1: the chosen profile. KEY_DEVICE_MODE is retained as the on-the-wire value sent
+        // to the backend, and as the migration source for installs created before the fork.
+        val KEY_PROFILE = stringPreferencesKey("app_profile")
         val KEY_DEVICE_ID = stringPreferencesKey("device_id")
 
         val KEY_PERSON_NAME = stringPreferencesKey("person_name")
@@ -169,14 +173,38 @@ class PreferencesManager(private val context: Context) {
         return resolved
     }
 
+    /**
+     * Resolves the chosen profile, migrating installs that predate the first-run fork.
+     *
+     * An install written before Phase 1 has no KEY_PROFILE but does have KEY_DEVICE_MODE, because
+     * setup always wrote it. Those installs genuinely chose the resident profile — they completed
+     * the protected form — so they must resolve to AppProfile.PROTECTED and must NOT be sent back
+     * to profile selection. Only a genuinely blank install has neither key, and that is the one
+     * that returns null.
+     */
+    private fun readProfile(prefs: androidx.datastore.preferences.core.Preferences): AppProfile? {
+        prefs[KEY_PROFILE]?.let { stored ->
+            return try {
+                AppProfile.valueOf(stored)
+            } catch (e: Exception) {
+                null
+            }
+        }
+        val legacyMode = prefs[KEY_DEVICE_MODE] ?: return null
+        return try {
+            when (DeviceMode.valueOf(legacyMode)) {
+                DeviceMode.MONITORING_DEVICE -> AppProfile.MONITORING
+                DeviceMode.PROTECTED_DEVICE -> AppProfile.PROTECTED
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     val appConfigFlow: Flow<AppConfig> = dataStore.data.map { prefs ->
         AppConfig(
             isSetupComplete = prefs[KEY_SETUP_COMPLETE] ?: false,
-            deviceMode = try {
-                DeviceMode.valueOf(prefs[KEY_DEVICE_MODE] ?: DeviceMode.PROTECTED_DEVICE.name)
-            } catch (e: Exception) {
-                DeviceMode.PROTECTED_DEVICE
-            },
+            profile = readProfile(prefs),
             deviceId = prefs[KEY_DEVICE_ID] ?: "",
             personName = prefs[KEY_PERSON_NAME] ?: "",
             personRole = prefs[KEY_PERSON_ROLE] ?: "",
@@ -255,6 +283,9 @@ class PreferencesManager(private val context: Context) {
     suspend fun saveConfig(config: AppConfig) {
         dataStore.edit { prefs ->
             prefs[KEY_SETUP_COMPLETE] = config.isSetupComplete
+            config.profile?.let { prefs[KEY_PROFILE] = it.name }
+            // Still written so the backend keeps receiving the mode it expects, and so an
+            // install that downgrades to a pre-Phase-1 build keeps a coherent value.
             prefs[KEY_DEVICE_MODE] = config.deviceMode.name
             // Never overwrite a real identity with a blank one from an unhydrated config.
             if (config.deviceId.isNotBlank()) {

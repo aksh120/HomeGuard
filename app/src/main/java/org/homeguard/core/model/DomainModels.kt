@@ -8,6 +8,19 @@ enum class DeviceMode {
 }
 
 /**
+ * Which of the two experiences this install is using.
+ *
+ * Null means the user has not chosen yet, which is a distinct third state. It previously did not
+ * exist: [DeviceMode] defaulted to PROTECTED_DEVICE, so an install that had never been configured
+ * was indistinguishable from one that had deliberately chosen the resident profile. That is why
+ * every monitoring install was routed into protected setup.
+ */
+enum class AppProfile {
+    PROTECTED,
+    MONITORING
+}
+
+/**
  * The person the protected device watches over.
  *
  * Section 9 requires name, optional photo, and relationship. Every field is optional and nothing
@@ -146,7 +159,13 @@ data class BatteryThresholds(
 
 data class AppConfig(
     val isSetupComplete: Boolean = false,
-    val deviceMode: DeviceMode = DeviceMode.PROTECTED_DEVICE,
+    /**
+     * The profile the user chose at first run, or null if they have not chosen yet.
+     *
+     * Single source of truth for the install's role. [deviceMode] is derived from it rather than
+     * stored separately, so the two can never drift apart.
+     */
+    val profile: AppProfile? = null,
     // Blank by default. Identity is minted and persisted by PreferencesManager.ensureDeviceId();
     // defaulting this to a fresh UUID would hand out a new identity on every construction.
     val deviceId: String = "",
@@ -167,6 +186,23 @@ data class AppConfig(
     /** Set once the resident has read and accepted the safety notice. */
     val hasAcknowledgedSafetyNotice: Boolean = false
 ) {
+    /**
+     * The mode reported to the remote backend and used for routing.
+     *
+     * Derived, never stored. An install that has not chosen a profile resolves to PROTECTED_DEVICE
+     * so remote registration and pre-existing behaviour are unchanged; the routing guard in
+     * ProfileRouting is what keeps such an install on the profile-selection screen.
+     */
+    val deviceMode: DeviceMode
+        get() = when (profile) {
+            AppProfile.MONITORING -> DeviceMode.MONITORING_DEVICE
+            AppProfile.PROTECTED, null -> DeviceMode.PROTECTED_DEVICE
+        }
+
+    /** True once a profile has been chosen, whether or not setup has finished. */
+    val hasChosenProfile: Boolean
+        get() = profile != null
+
     val protectedPerson: ProtectedPerson
         get() = ProtectedPerson(name = personName, relationship = personRole)
 
