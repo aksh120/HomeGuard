@@ -28,6 +28,8 @@ import org.homeguard.core.data.SafetyRepository
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.AppProfile
+import org.homeguard.core.model.ApprovalKind
+import org.homeguard.core.model.ApprovalRequest
 import org.homeguard.core.model.CaregiverAggregator
 import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.Household
@@ -149,6 +151,9 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private var countdownJob: Job? = null
 
+    /** Guards the one-off approval poll kicked off when the resident profile is first seen. */
+    private var approvalsLoaded = false
+
     /** Tracks which battery thresholds have already alerted, so each fires once per discharge. */
     private var lowBatteryNotified = false
     private var criticalBatteryNotified = false
@@ -169,6 +174,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     config.profile == AppProfile.PROTECTED
                 ) {
                     _safetyNoticeVisible.value = true
+                }
+                // The resident is the side that receives approval requests, so it is the side that
+                // has to poll for them. Keyed on the profile changing rather than on every emission,
+                // otherwise each write would cause a round trip.
+                if (config.profile == AppProfile.PROTECTED && !approvalsLoaded) {
+                    approvalsLoaded = true
+                    refreshApprovals()
                 }
             }
         }
@@ -732,6 +744,9 @@ fun switchToProtectedProfile() {
             _remoteEmergencies.value = emergencies
             _remoteCheckIns.value = checkIns
             _householdMembers.value = members
+            // Q4: the resident sees only the people watching them, never the placeholder rows that
+            // describe the protected device itself.
+            _watchers.value = members.filter { it.role != "PROTECTED" }
             _watchedPeople.value = CaregiverAggregator.watchedPeople(devices, checkIns, emergencies)
             // Kept for the single-device call sites; the dashboard now uses watchedPeople.
             _monitoredDevice.value = _watchedPeople.value.firstOrNull()?.device
@@ -748,6 +763,71 @@ fun switchToProtectedProfile() {
 
     fun dismissHouseholdError() {
         _householdError.value = null
+    }
+
+    // --- approval requests (phase 3, decision D4) -------------------------------------------
+
+    private val _approvals = MutableStateFlow<List<ApprovalRequest>>(emptyList())
+    val approvals: StateFlow<List<ApprovalRequest>> = _approvals.asStateFlow()
+
+    private val _approvalError = MutableStateFlow<String?>(null)
+    val approvalError: StateFlow<String?> = _approvalError.asStateFlow()
+
+    private val _approvalResult = MutableStateFlow<ApprovalKind?>(null)
+    val approvalResult: StateFlow<ApprovalKind?> = _approvalResult.asStateFlow()
+
+    /**
+     * Caregivers currently watching this household.
+     *
+     * Decision Q4: the resident must always be able to see who is watching them. A household with
+     * silent watchers is the failure mode D4's approval codes exist to prevent, so this is derived
+     * from the same membership the approvals gate rather than from a separate source.
+     */
+    private val _watchers = MutableStateFlow<List<HouseholdMember>>(emptyList())
+    val watchers: StateFlow<List<HouseholdMember>> = _watchers.asStateFlow()
+
+    /** Reloads approval requests addressed to this install. */
+    fun refreshApprovals() {
+        viewModelScope.launch {
+            container.monitoringRemoteDataSource.listApprovalsForSelf()
+                .onSuccess { _approvals.value = it }
+                .onFailure { _approvalError.value = it.message }
+        }
+    }
+
+    /**
+     * Submits an approval code on behalf of the caregiver who is watching.
+     *
+     * The membership change happens in the database; this only presents the code.
+     */
+    fun submitApprovalCode(code: String) {
+        viewModelScope.launch {
+            _approvalError.value = null
+            container.monitoringRemoteDataSource.submitApprovalCode(code)
+                .onSuccess { kind ->
+                    _approvalResult.value = kind
+                    refreshMonitoring()
+                }
+                .onFailure { _approvalError.value = it.message }
+        }
+    }
+
+    /** Withdraws a pending request. Without this the resident could not refuse one. */
+    fun cancelApproval(request: ApprovalRequest) {
+        viewModelScope.launch {
+            _approvalError.value = null
+            container.monitoringRemoteDataSource.cancelApproval(request.id)
+                .onSuccess { refreshApprovals() }
+                .onFailure { _approvalError.value = it.message }
+        }
+    }
+
+    fun dismissApprovalError() {
+        _approvalError.value = null
+    }
+
+    fun dismissApprovalResult() {
+        _approvalResult.value = null
     }
 
     override fun onCleared() {

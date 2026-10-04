@@ -177,6 +177,26 @@
     <string name="caregiver_add_person">Add another person</string>
     <string name="caregiver_add_person_body">Enter the invite code from their HomeGuard phone. Everyone sharing that code appears here.</string>
     <string name="common_cancel">Cancel</string>
+
+    <!-- Approval requests (Phase 3, decisions D4/D5/Q4) -->
+    <string name="approvals_heading">Requests waiting for you</string>
+    <string name="approvals_watched_by">People watching this home</string>
+    <string name="approvals_no_watchers">Nobody is watching this home yet. You will always be able to see this list.</string>
+    <string name="approvals_watcher_row">Someone with an approval code</string>
+    <string name="approvals_code_label">Approval code</string>
+    <string name="approvals_code_instructions">Read this code out, or send it to the person waiting. Nothing changes until they enter it.</string>
+    <string name="approvals_decline">Decline</string>
+    <string name="approvals_request_join_title">Someone wants to watch this home</string>
+    <string name="approvals_request_join_body">They have entered your home code and are asking permission to see the safety status. They cannot see anything yet.</string>
+    <string name="approvals_request_remove_title">Someone wants to stop watching</string>
+    <string name="approvals_request_remove_body">They are asking to be removed from this home. They keep access until this code is entered.</string>
+    <string name="approvals_request_switch_title">Someone wants to change this phone</string>
+    <string name="approvals_request_switch_body">They are asking to turn this phone from a home device into a monitoring device. Nothing changes until this code is entered.</string>
+    <string name="approvals_enter_code_title">Enter the approval code</string>
+    <string name="approvals_enter_code_body">The person at home will show you a short code. Entering it completes your request.</string>
+    <string name="approvals_submit_code">Confirm</string>
+    <string name="approvals_joined">You can now watch this home.</string>
+    <string name="approvals_removed">You have stopped watching this home.</string>
     <string name="caregiver_no_activity">Nothing has been reported yet.</string>
     <string name="caregiver_emergency_alert">Emergency alert</string>
     <string name="caregiver_emergency_advice">Contact them now. If you cannot reach them, consider calling local emergency services.</string>

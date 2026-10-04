@@ -615,17 +615,37 @@ HTTP 429
 
 ### Phase 3 — Approval codes
 
-**Work:**
-- Caregiver joins → pending request + code on the protected phone
-- Caregiver removed → same code path, symmetric (D4)
-- Protected → Monitoring → requires approval (D4)
-- Monitoring → Protected → no approval; re-runs protected setup, offers to leave household
-- Unapproved requests **never expire** (D5)
-- Protected phone always displays **who is currently watching it**
+**Status: done**, with one gap recorded below.
 
-**Done when:** no membership change is possible without a code.
-**Risk:** medium — approval flows are easy to get subtly wrong.
-**Needs the developer:** no.
+**Work:**
+- `remote_commands` table (migration 011) holding approval requests. Created here rather than in
+  Phase 5 because approvals need it first
+- **The code is minted and checked in the database**, never by the client. The code is the entire
+  consent mechanism, so a client-side comparison would mean anything able to call PostgREST could
+  satisfy an approval by guessing
+- RLS: INSERT gated per kind, SELECT limited to the target device and the requester, UPDATE only the
+  target — so a requester can never mark their own request satisfied
+- `approve_remote_command(code)` performs the membership change itself. The client can only present
+  a code
+- `cancel_remote_command(id)` so a resident can refuse. Without it, "consent" would mean "no way to
+  say no"
+- `ApprovalsSection` on the resident's home screen: pending requests each showing the code, plus a
+  permanently visible "people watching this home" list (Q4)
+- `ApprovalCodeEntry` on the caregiver dashboard, separate from the join flow because joining a
+  household and being approved to watch it are different actions with different consent requirements
+- `ApprovalPolicy` holds the pure rules, with **no age parameter on `isAwaitingAction` by design**
+  (D5). If a future change reintroduces a timeout, that signature makes it visible
+
+**Done when:** no membership change is possible without a code. ✅
+
+**Gap:** the protected → monitoring switch is *schema* ready (`APPROVE_MODE_SWITCH` kind, plus a
+`cancel_remote_command` path and the device-side `resolve_own_remote_commands` policy that lets the
+device mark it applied) but the client flow is not wired. There is currently no UI on the resident's
+phone that *creates* a switch request, so the kind is unreachable. The reverse direction
+(monitoring → protected) works and correctly needs no approval.
+
+**Risk:** medium. Four bugs were found only by executing the functions, not reading them —
+see the change log.
 
 ### Phase 4 — FCM push
 
@@ -761,8 +781,8 @@ given, so none of them blocks starting Phase 0.
 |---|---|---|
 | Q1 | What is the household's display name? Currently the dashboard shows the invite code where a name belongs. | Add a `name` column to `households`, default to a localised "My home", and never display the invite code as a label. |
 | Q2 | Can a caregiver belong to more than one household in the app UI at once, or switch between them? | Support the list; default to showing all households' people in one feed. The schema already permits it. |
-| Q3 | Should the caregiver be able to resolve/dismiss an emergency from the dashboard? | Yes — but only the device owner may mark a `remote_commands` row `EXECUTED`; a caregiver resolving an alert is a UI-side state, not a server write. |
-| Q4 | Does the protected phone need a visible "monitored by" indicator at all times? | Yes. Required by D4's transparency principle and already implied by Phase 3. |
+| Q3 | Should the caregiver be able to resolve/dismiss an emergency from the dashboard? | Yes — but only the device owner may mark a `remote_commands` row `EXECUTED`; a caregiver resolving an alert is a UI-side state, not a server write. **Done in Phase 3:** `resolve_own_remote_commands` restricts UPDATE to the target device. |
+| Q4 | Does the protected phone need a visible "monitored by" indicator at all times? | Yes. Required by D4's transparency principle and already implied by Phase 3. **Done:** `ApprovalsSection` renders the watcher list unconditionally, including when it is empty. |
 | Q5 | **How is a watched person reached by phone?** Phase 2's Call action was deferred because no phone number for a watched person exists anywhere in the schema, and `monitoring_contacts` holds the resident's contacts — which for a caregiver is their own details. | Needs a decision before it can be built: add `contact_phone` to `devices` and an input on the protected profile, or point Call at a shared contact list instead. |
 
 ---
@@ -832,3 +852,6 @@ Plus, specific to this roadmap:
 | 2026-10-04 | Initial roadmap. Recorded decisions D1–D10, platform decision Supabase+FCM, defects D-1…D-11, schema inventory, remote SOS design, seven-phase plan. |
 | 2026-10-04 | Phase 1 and Phase 0 completed. Recorded the migration-directory bug (L10) and the corrupted `local.properties` URL (L11). Migration 004 still unapplied. |
 | 2026-10-04 | Phase 2 completed: multi-person dashboard, per-person check-in resolution, household set, add-another-person by code, household name replacing the invite code. Recorded Q5 for the deferred Call action. |
+| 2026-10-04 | Phase 3 completed: `remote_commands`, server-minted approval codes, database-executed approval and cancellation, resident-side approvals and watcher list, caregiver-side code entry. Recorded the unwired protected→monitoring switch as a Phase 3 gap. Four defects found only by executing the functions are listed below. |
+| 2026-10-04 | Defects found by executing rather than reading the approval migrations, all now fixed: `approve_remote_command` declared an OUT parameter named `household_id` that shadowed the column (42702); `CREATE OR REPLACE` cannot change a return type (42P13); `can_request_for` collapsed to "requester is the target" so no real member could request; and it keyed on `devices.household_id` rather than membership, which also refused every first-time joiner. |
+| 2026-10-04 | Corrected an earlier claim in migration 011 that approvals cannot be spam. A join request is created by someone who is by definition not yet a member, so a stranger holding a household id could flood a resident's approvals list. Fixed with a partial unique index plus a 60-minute per-target interval. |

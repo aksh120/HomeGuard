@@ -44,6 +44,7 @@ import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.designsystem.theme.StatusUnknown
 import org.homeguard.core.model.CaregiverActivity
 import org.homeguard.core.model.CaregiverAggregator
+import org.homeguard.core.model.ApprovalRequest
 import org.homeguard.core.model.HouseholdMember
 import org.homeguard.core.model.RemoteCheckIn
 import org.homeguard.core.model.RemoteEmergencyEvent
@@ -72,13 +73,18 @@ fun CaregiverDashboardScreen(
     householdName: String,
     people: List<WatchedPerson>,
     members: List<HouseholdMember>,
+    approvals: List<ApprovalRequest> = emptyList(),
+    approvalError: String? = null,
+    isSubmittingApproval: Boolean = false,
     emergencyEvents: List<RemoteEmergencyEvent>,
     checkIns: List<RemoteCheckIn>,
     isRefreshing: Boolean,
     loadState: CaregiverLoadState,
     lastRefreshedAt: Long?,
     onRefresh: () -> Unit,
-    onAddPerson: () -> Unit
+    onAddPerson: () -> Unit,
+    onSubmitApprovalCode: (String) -> Unit = {},
+    onDismissApprovalError: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
 
@@ -254,6 +260,17 @@ fun CaregiverDashboardScreen(
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Completing a request is a separate action from joining a household, so it gets its own
+        // panel rather than sharing the join flow.
+        ApprovalCodeEntry(
+            isSubmitting = isSubmittingApproval,
+            errorMessage = approvalError,
+            onSubmit = onSubmitApprovalCode,
+            onDismissError = onDismissApprovalError
+        )
 
         Spacer(modifier = Modifier.height(20.dp))
 

@@ -58,6 +58,11 @@ fun HomeGuardApp(
     val households by viewModel.households.collectAsState()
     val watchedPeople by viewModel.watchedPeople.collectAsState()
     val householdMembers by viewModel.householdMembers.collectAsState()
+
+    // Approval requests (Phase 3)
+    val approvals by viewModel.approvals.collectAsState()
+    val watchers by viewModel.watchers.collectAsState()
+    val approvalError by viewModel.approvalError.collectAsState()
     val remoteEmergencies by viewModel.remoteEmergencies.collectAsState()
     val remoteCheckIns by viewModel.remoteCheckIns.collectAsState()
     val isRefreshingMonitoring by viewModel.isRefreshingMonitoring.collectAsState()
@@ -130,13 +135,18 @@ fun HomeGuardApp(
                         ?: stringResource(R.string.caregiver_default_household),
                     people = watchedPeople,
                     members = householdMembers,
+                    approvals = approvals,
+                    approvalError = approvalError,
+                    isSubmittingApproval = isRefreshingMonitoring,
                     emergencyEvents = remoteEmergencies,
                     checkIns = remoteCheckIns,
                     isRefreshing = isRefreshingMonitoring,
                     loadState = caregiverLoadState,
                     lastRefreshedAt = lastMonitoringRefresh,
                     onRefresh = viewModel::refreshMonitoring,
-                    onAddPerson = { showAddPersonDialog = true }
+                    onAddPerson = { showAddPersonDialog = true },
+                    onSubmitApprovalCode = viewModel::submitApprovalCode,
+                    onDismissApprovalError = viewModel::dismissApprovalError
                 )
             }
         }
@@ -175,6 +185,9 @@ fun HomeGuardApp(
                     fallDetectedAlert = fallDetectedAlert,
                     checkInPromptVisible = checkInPromptVisible,
                     safetyNoticeVisible = safetyNoticeVisible,
+                    approvals = approvals,
+                    watchers = watchers,
+                    onDeclineApproval = viewModel::cancelApproval,
                     onCheckInClick = { viewModel.confirmCheckIn() },
                     onEmergencyClick = { viewModel.startEmergencyCountdown() },
                     onCallPrimaryClick = { viewModel.initiateCallToPrimary(context) },

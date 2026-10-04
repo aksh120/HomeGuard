@@ -3,6 +3,10 @@ package org.homeguard.core.data
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.homeguard.core.model.ApprovalKind
+import org.homeguard.core.model.ApprovalPolicy
+import org.homeguard.core.model.ApprovalRequest
+import org.homeguard.core.model.ApprovalStatus
 import org.homeguard.core.model.Household
 import org.homeguard.core.model.HouseholdMember
 import org.homeguard.core.model.MonitoredDevice
@@ -157,6 +161,130 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
         }
     }
 
+    // --- approval requests (phase 3, decision D4) --------------------------------------------
+
+    /**
+     * Files a request that needs a code typed before it takes effect.
+     *
+     * The code itself is minted by the database and returned to the target device only, so a requester
+     * can never satisfy their own request.
+     */
+    suspend fun requestApproval(
+        targetUserId: String,
+        householdId: String?,
+        kind: ApprovalKind
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = authClient.accessToken()
+            ?: return@withContext Result.failure(RemoteNotConfiguredException())
+        val requesterId = authClient.currentUserId()
+        if (requesterId.isBlank()) {
+            return@withContext Result.failure(IllegalStateException("No active session"))
+        }
+        val body = JSONObject().apply {
+            put("target_user_id", targetUserId)
+            householdId?.let { put("household_id", it) }
+            put("kind", kind.name)
+            put("requested_by", requesterId)
+        }
+        when (
+            val result = request(
+                "POST",
+                "remote_commands",
+                body.toString(),
+                token,
+                prefer = "return=minimal"
+            )
+        ) {
+            is HttpResult.Failure -> Result.failure(result.error)
+            is HttpResult.Success -> Result.success(Unit)
+        }
+    }
+
+    /**
+     * Approval requests addressed to this install.
+     *
+     * Only ever returns requests targeting the caller, per the read policy, so this cannot be used to
+     * peek at someone else's pending requests or their approval codes.
+     */
+    suspend fun listApprovalsForSelf(includeResolved: Boolean = false): Result<List<ApprovalRequest>> =
+        withContext(Dispatchers.IO) {
+            val token = authClient.accessToken()
+                ?: return@withContext Result.failure(RemoteNotConfiguredException())
+            val statusFilter = if (includeResolved) {
+                "status=neq.CANCELLED"
+            } else {
+                "status=eq.PENDING"
+            }
+            when (
+                val result = request(
+                    "GET",
+                    "remote_commands?$statusFilter&select=*&order=created_at.desc",
+                    null,
+                    token
+                )
+            ) {
+                is HttpResult.Failure -> Result.failure(result.error)
+                is HttpResult.Success -> Result.success(result.rows.map { it.toApprovalRequest() })
+            }
+        }
+
+    /**
+     * Submits a code for approval.
+     *
+     * The membership change is performed by the database function, not here. This client cannot
+     * approve anything by itself, only present a code.
+     */
+    suspend fun submitApprovalCode(code: String): Result<ApprovalKind> = withContext(Dispatchers.IO) {
+        val token = authClient.accessToken()
+            ?: return@withContext Result.failure(RemoteNotConfiguredException())
+        val normalised = ApprovalPolicy.normaliseCode(code)
+        if (!ApprovalPolicy.isComplete(normalised)) {
+            return@withContext Result.failure(
+                IllegalArgumentException("An approval code is ${ApprovalPolicy.CODE_LENGTH} characters")
+            )
+        }
+        val body = JSONObject().apply { put("submitted_code", normalised) }
+        when (
+            val result = request(
+                "POST",
+                "rpc/approve_remote_command",
+                body.toString(),
+                token
+            )
+        ) {
+            is HttpResult.Failure -> Result.failure(result.error)
+            is HttpResult.Success -> {
+                val raw = result.rows.firstOrNull()?.optString("approved_kind")
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Approval returned no result")
+                    )
+                val kind = ApprovalKind.fromWire(raw)
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("Unknown approval type: $raw")
+                    )
+                Result.success(kind)
+            }
+        }
+    }
+
+    /** Withdraws a request before it is exercised. Without this a resident could never refuse. */
+    suspend fun cancelApproval(commandId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        val token = authClient.accessToken()
+            ?: return@withContext Result.failure(RemoteNotConfiguredException())
+        val body = JSONObject().apply { put("command_id", commandId) }
+        when (
+            val result = request(
+                "POST",
+                "rpc/cancel_remote_command",
+                body.toString(),
+                token
+            )
+        ) {
+            is HttpResult.Failure -> Result.failure(result.error)
+            is HttpResult.Success -> Result.success(Unit)
+        }
+    }
+
     // --- monitoring reads ---------------------------------------------------------------
 
     suspend fun listMembers(householdId: String): Result<List<HouseholdMember>> =
@@ -259,7 +387,8 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
         method: String,
         path: String,
         body: String?,
-        token: String
+        token: String,
+        prefer: String = "return=representation"
     ): HttpResult = withContext(Dispatchers.IO) {
         var conn: HttpURLConnection? = null
         try {
@@ -269,7 +398,7 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
                 setRequestProperty("apikey", token)
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "application/json")
-                setRequestProperty("Prefer", "return=representation")
+                setRequestProperty("Prefer", prefer)
                 connectTimeout = 15000
                 readTimeout = 15000
                 if (body != null) doOutput = true
@@ -335,6 +464,16 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
 
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
+
+private fun JSONObject.toApprovalRequest(): ApprovalRequest = ApprovalRequest(
+    id = optString("id"),
+    kind = ApprovalKind.fromWire(optString("kind")) ?: ApprovalKind.APPROVE_JOIN,
+    status = ApprovalStatus.fromWire(optString("status")) ?: ApprovalStatus.PENDING,
+    approvalCode = optStringOrNull("approval_code"),
+    createdAt = optString("created_at"),
+    requesterName = optStringOrNull("requested_by_name").orEmpty(),
+    householdId = optStringOrNull("household_id")
+)
 
 private fun JSONObject.toMonitoredDevice(): MonitoredDevice {
     val status = optJSONObject("device_status")

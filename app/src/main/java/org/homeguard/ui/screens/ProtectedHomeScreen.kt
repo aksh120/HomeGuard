@@ -43,6 +43,8 @@ import org.homeguard.R
 import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.hardware.ConnectivityInfo
 import org.homeguard.core.model.AppConfig
+import org.homeguard.core.model.ApprovalRequest
+import org.homeguard.core.model.HouseholdMember
 import org.homeguard.core.model.SafetyStatus
 import org.homeguard.ui.NavigationDestination
 import org.homeguard.ui.components.CyberActionTile
@@ -75,6 +77,9 @@ fun ProtectedHomeScreen(
     fallDetectedAlert: Boolean,
     checkInPromptVisible: Boolean,
     safetyNoticeVisible: Boolean,
+    approvals: List<ApprovalRequest> = emptyList(),
+    watchers: List<HouseholdMember> = emptyList(),
+    onDeclineApproval: (ApprovalRequest) -> Unit = {},
     onCheckInClick: () -> Unit,
     onEmergencyClick: () -> Unit,
     onCallPrimaryClick: () -> Unit,
@@ -124,6 +129,16 @@ fun ProtectedHomeScreen(
         Spacer(modifier = Modifier.height(12.dp))
 
         SyncStatusCard(syncHealth = syncHealth, pendingSyncCount = pendingSyncCount)
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Q4: who is watching, and any request waiting on this resident. Sits directly under the
+        // sync card because both answer "is this phone actually reporting what it says".
+        ApprovalsSection(
+            approvals = approvals,
+            watchers = watchers,
+            onDecline = onDeclineApproval
+        )
 
         Spacer(modifier = Modifier.height(24.dp))
 
