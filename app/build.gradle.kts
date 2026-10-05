@@ -23,6 +23,29 @@ val ciSupabaseUrl = (project.findProperty("SUPABASE_URL") ?: System.getenv("SUPA
 val ciSupabaseAnonKey = (project.findProperty("SUPABASE_ANON_KEY")
     ?: System.getenv("SUPABASE_ANON_KEY") ?: "").toString().replace("\"", "\\\"")
 
+// Phase 4: the google-services plugin fails the build outright when its config is missing, so it is
+// applied only when the file is actually present. Push then degrades to "unavailable" at runtime
+// rather than making the project unbuildable, which matters because the config is supplied per
+// developer and per build type rather than committed.
+//
+// The build warns loudly instead of failing, because a build that cannot reach Firebase is not
+// obviously broken from the outside and push silently not working in a safety app is worse than a
+// noisy log line. Release distribution still requires the file; see README and NEW_PHASES.md L12.
+val firebaseConfigFiles = listOf(
+    file("src/debug/google-services.json"),
+    file("src/release/google-services.json"),
+    file("google-services.json")
+)
+val hasFirebaseConfig = firebaseConfigFiles.any { it.exists() }
+if (hasFirebaseConfig) {
+    apply(plugin = "com.google.gms.google-services")
+} else {
+    logger.warn(
+        "WARNING: google-services.json not found in ${firebaseConfigFiles.map { it.path }}. " +
+            "Push notifications will be unavailable. See README section 4."
+    )
+}
+
 android {
     namespace = "org.homeguard"
     compileSdk = 35
@@ -78,6 +101,13 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+    // Required by registerForActivityResult; see the note in libs.versions.toml.
+    implementation(libs.androidx.fragment)
+
+    // Push delivery (Phase 4). The BOM pins every Firebase artifact, so firebase-messaging carries no
+    // version of its own.
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)

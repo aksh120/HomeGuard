@@ -58,6 +58,18 @@
         </receiver>
 
         <!--
+          Phase 4: receives caregiver alerts while backgrounded. exported is false because nothing
+          outside the app may bind to it; FCM delivery does not require it to be exported.
+        -->
+        <service
+            android:name=".core.notifications.HomeGuardMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <!--
           Scheduled safety check. Exported is false and the action is internal, so nothing outside
           the app can trigger a check-in prompt.
         -->

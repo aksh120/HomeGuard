@@ -1,5 +1,7 @@
 package org.homeguard.ui
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -14,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.viewmodel.compose.viewModel
+import org.homeguard.HomeGuardApplication
 import org.homeguard.R
 import org.homeguard.core.model.AppProfile
 import org.homeguard.ui.screens.AddPersonDialog
@@ -25,6 +28,7 @@ import org.homeguard.ui.screens.FireGuideScreen
 import org.homeguard.ui.screens.MonitoringDashboardScreen
 import org.homeguard.ui.screens.MonitorJoinScreen
 import org.homeguard.ui.screens.NightModeScreen
+import org.homeguard.ui.screens.NotificationPermissionGate
 import org.homeguard.ui.screens.PowerCutScreen
 import org.homeguard.ui.screens.ProtectedHomeScreen
 import org.homeguard.ui.screens.RoleSelectionScreen
@@ -33,9 +37,12 @@ import org.homeguard.ui.screens.SetupAndSettingsScreen
 @Composable
 fun HomeGuardApp(
     viewModel: HomeViewModel = viewModel(),
-    onRequestTorchPermission: () -> Unit = {}
+    onRequestTorchPermission: () -> Unit = {},
+    onRequestNotificationPermission: () -> Unit = {},
+    onOpenNotificationSettings: () -> Unit = {}
 ) {
     val context = LocalContext.current
+    val activity = LocalContext.current as? androidx.activity.ComponentActivity
 
     val currentDestination by viewModel.currentDestination.collectAsState()
     val safetyStatus by viewModel.safetyStatus.collectAsState()
@@ -76,6 +83,19 @@ fun HomeGuardApp(
     // Phase 2: adding another person is one invite code. Kept as local state rather than a
     // destination because it is a dialog over the dashboard, not a place the caregiver can land.
     var showAddPersonDialog by remember { mutableStateOf(false) }
+
+    // D9: push silently does nothing without this permission, so the caregiver profile is gated on
+    // it. Re-read on every recomposition, which covers returning from Android settings.
+    val notificationsAllowed = remember(Unit) {
+        HomeGuardApplication.hasNotificationPermission(context)
+    }
+
+    // True once the user has refused POST_NOTIFICATIONS at least once, which means the runtime
+    // request will no longer show and only the settings screen can change it.
+    val shouldShowRequestPermissionRationale = remember(Unit) {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            activity?.shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS) == true
+    }
 
     // Torch needs a runtime CAMERA grant; ask only when the user actually toggles it.
     val onFlashlightClick = {
@@ -161,6 +181,17 @@ fun HomeGuardApp(
                     showAddPersonDialog = false
                     viewModel.dismissHouseholdError()
                 }
+            )
+        }
+
+        // Only for the caregiver profile. The resident's own alerts are local notifications they
+        // trigger on their own screen, so a permission gate here would be solving a problem they
+        // do not have.
+        if (!notificationsAllowed) {
+            NotificationPermissionGate(
+                permanentlyDenied = shouldShowRequestPermissionRationale,
+                onRequestPermission = onRequestNotificationPermission,
+                onOpenSettings = onOpenNotificationSettings
             )
         }
         return

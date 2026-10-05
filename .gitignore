@@ -24,3 +24,11 @@ supabase/.temp/
 # `npx supabase` installs the CLI locally. That is tooling, not source.
 node_modules/
 package-lock.json
+
+# Firebase client config (Phase 4). Not a secret in the cryptographic sense, but it is
+# per-project and per-build-type, and this repository keeps release credentials out of git by
+# injecting them from CI, so these follow the same convention. The google-services plugin is applied
+# only when one of these exists; see app/build.gradle.kts.
+google-services.json
+app/src/debug/google-services.json
+app/src/release/google-services.json

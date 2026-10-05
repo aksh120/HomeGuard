@@ -1,9 +1,13 @@
 package org.homeguard
 
 import android.Manifest
-import android.content.pm.PackageManager
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -35,6 +39,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val requestNotificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* Re-checked by the UI on resume; nothing to do on the callback itself. */ }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -50,10 +58,41 @@ class MainActivity : ComponentActivity() {
                         viewModel = homeViewModel,
                         onRequestTorchPermission = {
                             requestTorchPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        },
+                        onRequestNotificationPermission = {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                requestNotificationPermissionLauncher.launch(
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                )
+                            }
+                        },
+                        onOpenNotificationSettings = {
+                            openAppNotificationSettings()
                         }
                     )
                 }
             }
+        }
+    }
+
+    /**
+     * Opens this app's notification settings.
+     *
+     * Needed because once POST_NOTIFICATIONS is permanently denied the runtime request does nothing,
+     * and the only remaining route is the settings screen.
+     */
+    private fun openAppNotificationSettings() {
+        val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        } else {
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                .setData(Uri.fromParts("package", packageName, null))
+        }
+        // Guarded because some OEM builds do not resolve the action; a crash here would be far
+        // worse than leaving the user on the current screen.
+        runCatching { startActivity(intent) }.onFailure {
+            Toast.makeText(this, R.string.push_gate_settings_unavailable, Toast.LENGTH_LONG).show()
         }
     }
 

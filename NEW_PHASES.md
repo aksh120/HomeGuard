@@ -649,19 +649,50 @@ see the change log.
 
 ### Phase 4 — FCM push
 
-**Work:**
-- `push_tokens` table + RLS (§6.1)
-- `google-services.json` at `app/src/debug/` and `app/src/release/`, gitignored
-- `FirebaseMessagingService` → `SafetyNotifier` on the existing `CHANNEL_EMERGENCY`
-- `onNewToken` handling
-- Blocking notification-permission gate (D-9)
-- Edge function: FCM HTTP v1 branch beside `sendEmail()`, `Promise.all`, push always / email
-  optional (D8)
-- Service account credential as function secret `FCM_SERVICE_ACCOUNT`
+**Status: code complete, delivery not yet verifiable.**
 
-**Done when:** a real push arrives on a backgrounded phone within seconds.
-**Risk:** medium — R8 and per-build-type config (D-10).
-**Needs the developer:** **yes, ~15 minutes** (§9).
+**Work:**
+- `push_tokens` table (migration 014) with RLS limited to the install's own tokens. `user_id` filled
+  by the existing trigger rather than sent by the client
+- `caregiver_push_tokens(device_id)` resolves a device's household caregivers to their tokens in one
+  server-side call, so the edge function does not walk households → members → tokens by hand
+- Token is globally unique and upserted. A token identifies a device *installation*, so if the same
+  installation were ever signed into a different account the stale row must be replaced or alerts
+  would go to the previous owner's account
+- `HomeGuardMessagingService` delegates display to the existing emergency channel rather than
+  duplicating the channel and priority logic, so a push and a local alert cannot drift apart
+- `PushTokenRegistrar` registers on launch **and** on `onNewToken`. Skipping `onNewToken` is the
+  classic way push dies quietly: the stored token works until FCM invalidates it, then alerts stop
+  for that caregiver with no error anywhere
+- Dead tokens FCM reports as `UNREGISTERED` are deleted, so a failed token is not retried forever
+- `NotificationPermissionGate` on the caregiver profile (D9). Push silently vanishes without
+  `POST_NOTIFICATIONS`, and a caregiver who believes they are protected when they are not is the
+  failure this prevents
+- Edge function: FCM HTTP v1 branch beside `sendEmail()`, both in `Promise.all`. OAuth is minted with
+  Web Crypto directly rather than an SDK, because the only requirement is an RS256 JWT assertion and
+  the SDK would be a dependency for one signature
+
+**Done when:** a real push arrives on a backgrounded phone within seconds. ❌ **Not yet verifiable —
+this is the one phase that needs developer input** (§9.1, §9.2).
+
+**Deliberately done two ways, both documented in code:**
+- The `google-services` plugin is applied **only when the config file exists**, and logs a loud
+  warning otherwise. The plugin fails the build outright when its config is missing, which would make
+  the project unbuildable for anyone who has not set up Firebase yet. Push then degrades to
+  unavailable at runtime rather than breaking the app
+- `PushTokenRegistrar` checks `FirebaseApp.getApps()` before touching the SDK, because reaching
+  Firebase without initialised config throws
+
+**One bug caught before it shipped:** the edge function sent
+`notification.channel_id: "emergency"` while the app's channel is `"channel_homeguard_emergency"`.
+Android does not error on that — it silently falls back to a default channel at
+`IMPORTANCE_DEFAULT`, so the alert appears but quietly loses high priority. `PushChannelContractTest`
+now asserts the two sides agree by reading the edge function source, so changing one without the other
+fails the build.
+
+**Risk:** medium, realised as D-10. R8 was verified, but it also surfaced
+`InvalidFragmentVersionForActivityResult`: Firebase pulls in `androidx.fragment` 1.1.0, below the
+1.3.0 floor that `registerForActivityResult` requires. Pinned to 1.8.5 explicitly.
 
 ### Phase 5 — Remote SOS
 
@@ -706,20 +737,28 @@ Everything else is agent-implementable. Total developer time across the whole ro
 3. Download `google-services.json`
 4. Place copies at `app/src/debug/google-services.json` and `app/src/release/google-services.json`
 
-**Do not commit these files.** Firebase config is not a true secret, but the project already keeps
-release credentials out of git by injecting them from CI, so these follow the same convention.
+**Do not commit these files.** Firebase config is not a true secret, but it is per-project and
+per-build, and the project already keeps release credentials out of git by injecting them from CI, so
+these follow the same convention. They are listed in `.gitignore`.
+
+The `google-services` plugin is applied only when one of these files exists, so the project stays
+buildable without them. The build prints a loud warning when they are absent. Push is genuinely
+unavailable in that state, so a release build should not ship without them.
 
 ### 9.2 Service account for FCM HTTP v1
 
 1. In the Firebase project → Project settings → Service accounts → Generate new private key
 2. Download the JSON key
-3. Store as a Supabase function secret:
+3. Store as a Supabase function secret, together with the project id (which is in the key file):
 
 ```
-supabase secrets set FCM_SERVICE_ACCOUNT='<paste json>' --project-ref rmiausgluaqqshszvged
+supabase secrets set FCM_SERVICE_ACCOUNT='<paste json>' FCM_PROJECT_ID='<project id>' --project-ref rmiausgluaqqshszvged
 ```
 
 FCM's HTTP v1 API requires an OAuth credential — the Supabase anon key will not work.
+
+Until this is set, `notify-caregiver` reports `"pushConfigured": false` in its response and email
+still carries the alert, so a missing secret degrades rather than breaking delivery.
 
 ### 9.3 Migrations
 
@@ -769,6 +808,8 @@ Recorded so they are not rediscovered as bugs.
 | L11 | **`local.properties` held a double-escaped Supabase URL** (`https\://…`) | Found in Phase 0. Every URL built from it was malformed, so debug builds could not reach Supabase at all. Corrected after confirming the host matches `project_id` in `supabase/config.toml`. The anon key was unaffected. Worth re-checking after any tool rewrites this file, since the corruption is silent. |
 | L12 | **PostgREST's schema cache cannot be reloaded from the CLI** | Migrations 005–008 are applied and verified, but `supabase db push` and `supabase db query` both connect through the pooler, where `NOTIFY pgrst, 'reload schema'` is not delivered. Every `/rpc/` path returns `404 requested path is invalid` even though the functions exist in `pg_proc`. Tables resolve normally, so only the function schema is stale. **Needs one manual step:** run `NOTIFY pgrst, 'reload schema';` in the Supabase dashboard SQL editor (which uses a direct connection), or restart PostgREST. The caregiver join path cannot work over HTTP until this is done. Database logic was verified independently — see §8 Phase 0 verification note. |
 | L13 | **`households` INSERT failed under `return=representation`** | Root cause was not the policy. `INSERT ... RETURNING` is evaluated against the table's SELECT policy, which requires existing membership, so the row a user had just created was invisible to them and PostgreSQL raised 42501. Confirmed by varying only the `Prefer` header: `return=minimal` → 201, `return=representation` → 403. Fixed by creating the household and its first member in one `SECURITY DEFINER` function, where RLS does not apply to `RETURNING`. |
+| L14 | **Release builds cannot actually deliver push until `google-services.json` exists** | The plugin is applied conditionally so the project stays buildable, and the build warns loudly. A release build produced without the config compiles and runs but registers no push token, so emergency alerts fall back to email only. Treat the build warning as blocking for a release. |
+| L15 | **Firebase raises the floor on `androidx.fragment`** | Firebase pulls in `androidx.fragment` 1.1.0 transitively, below the 1.3.0 that `registerForActivityResult` requires, which fails `lintVitalRelease`. Pinned explicitly to 1.8.5. Recorded because the symptom points at `MainActivity` and the cause is a push dependency, which makes it hard to find next time. |
 
 ---
 
@@ -855,3 +896,4 @@ Plus, specific to this roadmap:
 | 2026-10-04 | Phase 3 completed: `remote_commands`, server-minted approval codes, database-executed approval and cancellation, resident-side approvals and watcher list, caregiver-side code entry. Recorded the unwired protected→monitoring switch as a Phase 3 gap. Four defects found only by executing the functions are listed below. |
 | 2026-10-04 | Defects found by executing rather than reading the approval migrations, all now fixed: `approve_remote_command` declared an OUT parameter named `household_id` that shadowed the column (42702); `CREATE OR REPLACE` cannot change a return type (42P13); `can_request_for` collapsed to "requester is the target" so no real member could request; and it keyed on `devices.household_id` rather than membership, which also refused every first-time joiner. |
 | 2026-10-04 | Corrected an earlier claim in migration 011 that approvals cannot be spam. A join request is created by someone who is by definition not yet a member, so a stranger holding a household id could flood a resident's approvals list. Fixed with a partial unique index plus a 60-minute per-target interval. |
+| 2026-10-04 | Phase 4 code complete: `push_tokens`, FCM HTTP v1 in the edge function, `HomeGuardMessagingService`, token registration with `onNewToken`, dead-token cleanup, and the D9 notification gate. Delivery is **not** verifiable until `google-services.json` and `FCM_SERVICE_ACCOUNT` exist. Recorded L14 (release builds cannot deliver push without the config) and L15 (Firebase forces `androidx.fragment` past the Activity Result floor). |

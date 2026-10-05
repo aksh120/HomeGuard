@@ -193,6 +193,32 @@ class SupabaseRemoteSyncDataSource(
         }
     }
 
+    /**
+     * Stores this install's FCM registration token (Phase 4).
+     *
+     * Upserted on the globally unique token column rather than per user, because a token identifies a
+     * device installation: if the same installation were ever signed into a different account, the
+     * stale row has to be replaced or alerts would go to the previous owner's account.
+     *
+     * user_id is filled from the request JWT by a trigger, so it is not sent here.
+ */
+suspend fun registerPushToken(token: String): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!isConfigured) return@withContext Result.failure(RemoteNotConfiguredException())
+        if (token.isBlank()) return@withContext Result.success(Unit)
+        try {
+            val body = JSONObject().apply {
+                put("token", token)
+                put("platform", "ANDROID")
+            }
+            // on_conflict targets the token column, which is unique across users.
+            postToSupabase("push_tokens?on_conflict=token", body.toString())
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("SupabaseSync", "Could not register push token: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
     private suspend fun postToSupabase(
         table: String,
         jsonBody: String,

@@ -22,15 +22,8 @@ class SafetyNotifier(private val context: Context) {
 
     private val manager = NotificationManagerCompat.from(context)
 
-    fun canPost(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            return ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
-        }
-        return true
-    }
+    fun canPost(): Boolean =
+        HomeGuardApplication.hasNotificationPermission(context)
 
     /** Reassures the user that an SOS triggered while offline is stored and will send. */
     fun notifyEmergencyQueuedOffline() {

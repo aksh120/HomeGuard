@@ -197,6 +197,15 @@
     <string name="approvals_submit_code">Confirm</string>
     <string name="approvals_joined">You can now watch this home.</string>
     <string name="approvals_removed">You have stopped watching this home.</string>
+
+    <!-- Push notifications gate (Phase 4, decision D9) -->
+    <string name="push_gate_title">Turn on notifications</string>
+    <string name="push_gate_body">Without notifications, alerts cannot reach you when this phone is locked. Nothing here works in the background without them.</string>
+    <string name="push_gate_body_denied">Notifications are turned off for HomeGuard, so alerts cannot reach you when this phone is locked. You can turn them back on in Android settings.</string>
+    <string name="push_gate_allow">Turn on notifications</string>
+    <string name="push_gate_open_settings">Open Android settings</string>
+    <string name="push_gate_settings_link">Notification settings</string>
+    <string name="push_gate_settings_unavailable">Could not open settings. Turn on notifications for HomeGuard from Android settings.</string>
     <string name="caregiver_no_activity">Nothing has been reported yet.</string>
     <string name="caregiver_emergency_alert">Emergency alert</string>
     <string name="caregiver_emergency_advice">Contact them now. If you cannot reach them, consider calling local emergency services.</string>
