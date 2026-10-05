@@ -735,15 +735,27 @@ Everything else is agent-implementable. Total developer time across the whole ro
 1. Create a Firebase project at console.firebase.google.com (free, no card)
 2. Add an Android app with package name **`org.homeguard`**
 3. Download `google-services.json`
-4. Place copies at `app/src/debug/google-services.json` and `app/src/release/google-services.json`
 
-**Do not commit these files.** Firebase config is not a true secret, but it is per-project and
-per-build, and the project already keeps release credentials out of git by injecting them from CI, so
-these follow the same convention. They are listed in `.gitignore`.
+**One file at `app/google-services.json` is enough** and is the recommended option. Both build types
+use the same package name, so both use the same Firebase app registration; splitting per build type is
+only worth doing if you register a separate Firebase app for each.
+
+`app/src/debug/` and `app/src/release/` exist and are tracked via `.gitkeep`, so files can be dropped
+straight in. All three locations are gitignored — the config is per-project and per-build, and the
+project already keeps release credentials out of git by injecting them from CI, so it follows the same
+convention.
 
 The `google-services` plugin is applied only when one of these files exists, so the project stays
-buildable without them. The build prints a loud warning when they are absent. Push is genuinely
-unavailable in that state, so a release build should not ship without them.
+buildable without them. Verified both ways: with a config present the plugin generates
+`project_id`, `google_app_id`, `gcm_defaultSenderId` and `google_api_key` from the per-build-type
+file; with it absent the build prints a loud warning and the plugin's tasks are not registered. The
+build prints:
+
+```
+WARNING: google-services.json not found ... Push notifications will be unavailable.
+```
+
+Push is genuinely unavailable in that state, so a release build should not ship without it (L14).
 
 ### 9.2 Service account for FCM HTTP v1
 

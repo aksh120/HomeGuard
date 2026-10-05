@@ -184,21 +184,72 @@ For an existing database, push them in order:
 | [`20261002142224_households.sql`](supabase/migrations/20261002142224_households.sql) | Households, membership, and caregiver read access |
 | [`20261004130928_row_ownership_and_invite_lookup.sql`](supabase/migrations/20261004130928_row_ownership_and_invite_lookup.sql) | Assigns `user_id` and `household_id` on insert; invite-code lookup |
 
-### 3. Enable Anonymous sign-ins
+### 3. Firebase (optional, needed for push)
+
+Push alerts only work once Firebase is configured. Without it the app still builds and runs, and the
+build prints:
+
+```
+WARNING: google-services.json not found ... Push notifications will be unavailable.
+```
+
+That warning is worth treating as blocking for a release, because without it emergency alerts fall
+back to email only.
+
+To enable it:
+
+1. Create a project at [console.firebase.google.com](https://console.firebase.google.com) — free, no
+   card required
+2. Add an Android app with package name **`org.homeguard`**
+3. Download `google-services.json`
+
+Then place **one** of these:
+
+| Location | When to use |
+|---|---|
+| `app/google-services.json` | **Recommended.** One file for every build type. Both variants use the same package name, so both use the same Firebase app registration. |
+| `app/src/debug/google-services.json` | Only if you registered a *separate* Firebase app for debug builds |
+| `app/src/release/google-services.json` | Only if you registered a separate Firebase app for release builds |
+
+Both `app/src/debug/` and `app/src/release/` exist and are tracked in git via `.gitkeep`, so the files
+can be dropped straight in. All three locations are gitignored — the config is per-project and
+per-build, and this repository keeps release credentials out of git by injecting them from CI, so it
+follows the same convention.
+
+The `google-services` plugin is applied only when one of these files exists. That is deliberate: the
+plugin fails the build outright when its config is missing, which would make the project unbuildable
+for anyone who has not set up Firebase yet.
+
+To enable server-side sending, also set the service account as a function secret:
+
+```
+supabase secrets set FCM_SERVICE_ACCOUNT='<service account json>' FCM_PROJECT_ID='<project id>' --project-ref <project-ref>
+```
+
+Until that is set, `notify-caregiver` reports `"pushConfigured": false` and email still carries the
+alert, so a missing secret degrades rather than breaking delivery.
+
+### 4. Enable Anonymous sign-ins
 
 **Authentication → Providers → Anonymous Sign-Ins → ON**
 
 This is required. The RLS policies are scoped to `auth.uid()`, and the app bootstraps a per-install
 anonymous session. Without it every write is rejected.
 
-### 4. Deploy the caregiver notification function
+### 5. Deploy the caregiver notification function
 
 ```bash
 supabase functions deploy notify-caregiver --no-verify-jwt
 supabase secrets set RESEND_API_KEY=re_...
 ```
 
-### 5. Create the webhook
+Add the Firebase secrets too, if you configured Firebase in step 3:
+
+```bash
+supabase secrets set FCM_SERVICE_ACCOUNT='<service account json>' FCM_PROJECT_ID='<project id>'
+```
+
+### 6. Create the webhook
 
 **Database → Webhooks → Create**:
 
@@ -209,12 +260,13 @@ supabase secrets set RESEND_API_KEY=re_...
 
 The function is
 [`supabase/functions/notify-caregiver/index.ts`](supabase/functions/notify-caregiver/index.ts). It
-reads `RESEND_API_KEY` from a function secret, so no credential is ever shipped in the app.
+reads `RESEND_API_KEY` and `FCM_SERVICE_ACCOUNT` from function secrets, so no credential is ever
+shipped in the app.
 
 There is deliberately **no** webhook on `check_ins`: a caregiver does not need an email every
 morning saying the device is fine.
 
-### 6. Point the app at it
+### 7. Point the app at it
 
 Add to `local.properties` (debug builds only; release uses CI secrets):
 
