@@ -649,7 +649,7 @@ see the change log.
 
 ### Phase 4 — FCM push
 
-**Status: code complete, delivery not yet verifiable.**
+**Status: configured and server-verified. End-to-end delivery still untested.**
 
 **Work:**
 - `push_tokens` table (migration 014) with RLS limited to the install's own tokens. `user_id` filled
@@ -672,8 +672,27 @@ see the change log.
   Web Crypto directly rather than an SDK, because the only requirement is an RS256 JWT assertion and
   the SDK would be a dependency for one signature
 
-**Done when:** a real push arrives on a backgrounded phone within seconds. ❌ **Not yet verifiable —
-this is the one phase that needs developer input** (§9.1, §9.2).
+**Done when:** a real push arrives on a backgrounded phone within seconds. ❌ **Still untested — needs
+two devices** (a resident phone and a caregiver phone), an actual SOS, and the caregiver dashboard open
+at least once so a token registers.
+
+**Configured as of 2026-10-05:**
+- `google-services.json` present, byte-identical in all three locations, `package_name` `org.homeguard`
+  matching `applicationId`. Project `homeguard-d583b`. All gitignored.
+- `FCM_SERVICE_ACCOUNT` and `FCM_PROJECT_ID` set as function secrets, uploaded with
+  `supabase secrets set --env-file` specifically so the private key never appeared on a command line
+  or in shell history.
+- **Server side verified end to end.** Probing the deployed function reports
+  `"pushConfigured": true`, which only happens if the secret was read, `JSON.parse` succeeded, the
+  hand-rolled RS256 assertion was built correctly, and **Google accepted it and returned an access
+  token**. Any failure in that chain leaves the flag false.
+- Service account JSON validated before upload: `project_id` matches the client config, and the PEM
+  base64-decodes to a well-formed 1217-byte PKCS#8 DER key.
+
+`.gitignore` now also blocks `*firebase-adminsdk*.json` and service-account filenames. Unlike
+`google-services.json`, these are **real credentials** — the private key can mint tokens for the
+project and push to any registered device. Audited the repository: 126 tracked files, zero
+credential-like files.
 
 **Deliberately done two ways, both documented in code:**
 - The `google-services` plugin is applied **only when the config file exists**, and logs a loud
@@ -820,8 +839,9 @@ Recorded so they are not rediscovered as bugs.
 | L11 | **`local.properties` held a double-escaped Supabase URL** (`https\://…`) | Found in Phase 0. Every URL built from it was malformed, so debug builds could not reach Supabase at all. Corrected after confirming the host matches `project_id` in `supabase/config.toml`. The anon key was unaffected. Worth re-checking after any tool rewrites this file, since the corruption is silent. |
 | L12 | **PostgREST's schema cache cannot be reloaded from the CLI** | Migrations 005–008 are applied and verified, but `supabase db push` and `supabase db query` both connect through the pooler, where `NOTIFY pgrst, 'reload schema'` is not delivered. Every `/rpc/` path returns `404 requested path is invalid` even though the functions exist in `pg_proc`. Tables resolve normally, so only the function schema is stale. **Needs one manual step:** run `NOTIFY pgrst, 'reload schema';` in the Supabase dashboard SQL editor (which uses a direct connection), or restart PostgREST. The caregiver join path cannot work over HTTP until this is done. Database logic was verified independently — see §8 Phase 0 verification note. |
 | L13 | **`households` INSERT failed under `return=representation`** | Root cause was not the policy. `INSERT ... RETURNING` is evaluated against the table's SELECT policy, which requires existing membership, so the row a user had just created was invisible to them and PostgreSQL raised 42501. Confirmed by varying only the `Prefer` header: `return=minimal` → 201, `return=representation` → 403. Fixed by creating the household and its first member in one `SECURITY DEFINER` function, where RLS does not apply to `RETURNING`. |
-| L14 | **Release builds cannot actually deliver push until `google-services.json` exists** | The plugin is applied conditionally so the project stays buildable, and the build warns loudly. A release build produced without the config compiles and runs but registers no push token, so emergency alerts fall back to email only. Treat the build warning as blocking for a release. |
+| L14 | **Push delivery is configured but has never been observed working** | The Firebase client config and service account are in place and the *server* path is verified — `notify-caregiver` reports `pushConfigured: true`, which requires Google to have accepted a signed assertion. What is untested is a notification actually appearing on a real phone, because that needs two devices and a genuine SOS. Treat push as unproven until someone watches it fire. |
 | L15 | **Firebase raises the floor on `androidx.fragment`** | Firebase pulls in `androidx.fragment` 1.1.0 transitively, below the 1.3.0 that `registerForActivityResult` requires, which fails `lintVitalRelease`. Pinned explicitly to 1.8.5. Recorded because the symptom points at `MainActivity` and the cause is a push dependency, which makes it hard to find next time. |
+| L16 | **Service account private key sits in the Downloads folder** | The key was uploaded to Supabase secrets, then the temporary `.env` used to carry it was deleted and its absence verified. The original downloaded JSON is still on disk in `Downloads` and should be deleted, or at least understood as a live credential: it can mint OAuth tokens for the project and send push to any registered device. `.gitignore` now blocks it from being committed. |
 
 ---
 

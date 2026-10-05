@@ -32,3 +32,10 @@ package-lock.json
 google-services.json
 app/src/debug/google-services.json
 app/src/release/google-services.json
+
+# Firebase service account keys. Unlike google-services.json these ARE real credentials: the private
+# key in one can mint OAuth tokens for the project and send arbitrary push to any device registered
+# against it. They belong in Supabase function secrets only.
+*firebase-adminsdk*.json
+service-account*.json
+serviceaccount*.json
