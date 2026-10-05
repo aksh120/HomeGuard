@@ -28,6 +28,11 @@ class SyncWorker(
         val remote = container.remoteSyncDataSource
         val preferences = container.preferencesManager
 
+        // Before the heartbeat, because an alarm somebody is waiting on is worth more than a status
+        // report. Deliberately outside the try below: a failure here must not be recorded as a sync
+        // error, since outgoing alerts are unaffected by an inbound alarm lookup failing.
+        pollForCaregiverAlarms(container)
+
         return try {
             // Record the attempt first, so a crash mid-sync still leaves a timestamp behind.
             preferences.recordSyncAttempt(
@@ -78,6 +83,52 @@ class SyncWorker(
             runCatching { preferences.recordSyncError(e.message ?: "Unexpected error") }
             Log.e("SyncWorker", "Sync failed: ${e.message}")
             Result.retry()
+        }
+    }
+
+    /**
+     * Picks up a caregiver alarm that push failed to deliver.
+     *
+     * The fallback for every way a push can go missing: no Google Play Services on the phone, battery
+     * optimisation deferring the broadcast, the process killed before the claim, a caregiver on a
+     * phone whose token was stale. Fifteen minutes is a poor response time for a safety alarm, which
+     * is exactly why this is a fallback and not the primary path.
+     *
+     * Every command goes through [org.homeguard.core.data.RemoteAlarmDataSource.claimRemoteCommand]
+     * before alarming, so an alarm already delivered by push is skipped here rather than repeated.
+     */
+    private suspend fun pollForCaregiverAlarms(container: org.homeguard.core.di.AppContainer) {
+        try {
+            val pending = container.remoteAlarmDataSource.pendingAlarms().getOrElse {
+                Log.w("SyncWorker", "Could not check for caregiver alarms: ${it.message}")
+                return
+            }
+            if (pending.isEmpty()) return
+
+            for (alarm in pending) {
+                val claimed = container.remoteAlarmDataSource.claimRemoteCommand(alarm.id)
+                claimed
+                    .onSuccess { row ->
+                        if (row == null) {
+                            Log.i("SyncWorker", "Alarm ${alarm.id} already handled by push")
+                            return@onSuccess
+                        }
+                        Log.i("SyncWorker", "Delivering caregiver alarm ${alarm.id} via poll fallback")
+                        val name = container.remoteAlarmDataSource.requesterDisplayName(
+                            row.householdId,
+                            row.requestedBy
+                        )
+                        org.homeguard.core.notifications.RemoteAlarmService.start(
+                            applicationContext,
+                            row.id,
+                            name
+                        )
+                    }
+                    .onFailure { Log.w("SyncWorker", "Could not claim alarm ${alarm.id}", it) }
+            }
+        } catch (e: Exception) {
+            // Never let the fallback break the sync it was called from.
+            Log.w("SyncWorker", "Caregiver alarm poll failed: ${e.message}")
         }
     }
 

@@ -765,6 +765,60 @@ fun switchToProtectedProfile() {
         _householdError.value = null
     }
 
+    // --- caregiver-raised alarm (phase 5, decision D7) ----------------------------------------
+
+    /** The person an alarm was raised for, or null when the last attempt finished cleanly. */
+    private val _alarmRaisedFor = MutableStateFlow<String?>(null)
+    val alarmRaisedFor: StateFlow<String?> = _alarmRaisedFor.asStateFlow()
+
+    private val _alarmFailure = MutableStateFlow<String?>(null)
+    val alarmFailure: StateFlow<String?> = _alarmFailure.asStateFlow()
+
+    /**
+     * Raises an alarm for one watched person.
+     *
+     * Requires an explicit household, because a caregiver may watch several homes and an alarm must
+     * not silently target whichever device happens to be first in the list.
+     *
+     * The server does the real work in one transaction: it creates the command and notifies the
+     * resident's contacts together. This only reports whether that succeeded. A 15-minute rate limit
+     * is a refusal rather than a fault, so it is reported as such and not as an error the caregiver
+     * needs to act on.
+     */
+    fun raiseAlarmFor(person: WatchedPerson) {
+        val target = person.device
+        if (target.userId.isBlank() || target.householdId.isBlank()) {
+            _alarmFailure.value = getString(R.string.caregiver_raise_alarm_unavailable)
+            return
+        }
+        viewModelScope.launch {
+            _alarmFailure.value = null
+            _alarmRaisedFor.value = null
+            container.remoteAlarmDataSource.raiseAlarm(target.userId, target.householdId)
+                .onSuccess {
+                    _alarmRaisedFor.value = target.displayName
+                    // The caregiver's own dashboard now has an open emergency row for this person.
+                    refreshMonitoring()
+                }
+                .onFailure { failure ->
+                    val message = failure.message.orEmpty()
+                    _alarmFailure.value = if (
+                        message.contains("15 minutes", ignoreCase = true)
+                    ) {
+                        getString(
+                            R.string.caregiver_raise_alarm_throttled,
+                            target.displayName
+                        )
+                    } else {
+                        getString(
+                            R.string.caregiver_raise_alarm_failed,
+                            message.ifBlank { getString(R.string.caregiver_load_failed) }
+                        )
+                    }
+                }
+        }
+    }
+
     // --- approval requests (phase 3, decision D4) -------------------------------------------
 
     private val _approvals = MutableStateFlow<List<ApprovalRequest>>(emptyList())

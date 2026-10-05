@@ -390,6 +390,33 @@
     <string name="setup_commit">Save settings</string>
 
     <!-- Safety notice (section 52) -->
+    <!-- Caregiver-raised alarm (Phase 5, decision D7) -->
+    <string name="caregiver_alarm_title">Caregiver requested assistance</string>
+    <string name="caregiver_alarm_body">A caregiver who watches this home asked for help. This was not your emergency button.</string>
+    <string name="caregiver_alarm_reason">A caregiver who is allowed to watch this home asked for your help. If you did not expect this, ignore the alarm and check with them afterwards.</string>
+    <string name="caregiver_alarm_stop">Stop alarm</string>
+    <string name="caregiver_alarm_running">A caregiver asked for help. The alarm is sounding on this phone.</string>
+    <string name="caregiver_alarm_unknown_who">A caregiver</string>
+    <string name="caregiver_alarm_from">Asked by %1$s</string>
+    <string name="caregiver_alarm_missing">A caregiver asked for help, but this phone could not load who they are. The alarm is still sounding.</string>
+    <string name="caregiver_alarm_ended">The caregiver alarm stopped.</string>
+    <string name="alarm_service_channel_name">Caregiver alarm</string>
+    <string name="alarm_service_channel_desc">Shown while a caregiver-raised alarm is sounding</string>
+
+    <!-- Caregiver dashboard: raising an alarm for someone -->
+    <string name="caregiver_raise_alarm">Ask for help</string>
+    <string name="caregiver_raise_alarm_title">Ask for help for %1$s?</string>
+    <string name="caregiver_raise_alarm_body">This alarms the phone at home and notifies everyone watching it. Use it if you are worried about someone and cannot reach them.</string>
+    <string name="caregiver_raise_alarm_confirm">Send alarm</string>
+    <string name="caregiver_raise_alarm_sent">Alarm sent to %1$s.</string>
+    <string name="caregiver_raise_alarm_throttled">An alarm was already sent for %1$s in the last 15 minutes.</string>
+    <string name="caregiver_raise_alarm_failed">Could not send the alarm: %1$s</string>
+    <string name="caregiver_raise_alarm_unavailable">This device cannot be alarmed yet.</string>
+    <string name="caregiver_raise_alarm_calling">Use this if you are worried about someone and cannot reach them. It alerts the phone at home and everyone watching it.</string>
+    <string name="caregiver_raise_alarm_note">Everyone watching this home will be told a caregiver asked for help, not that the person pressed their own emergency button.</string>
+    <string name="caregiver_raise_alarm_for">For %1$s</string>
+    <string name="caregiver_alarm_ongoing">A caregiver asked for help. Your contacts were notified.</string>
+
     <string name="disclaimer_title">Before you start</string>
     <string name="disclaimer_text">HomeGuard is an extra safety layer. It is not a replacement for emergency services.\n\nInternet may be unavailable. The phone may lose power. Android may limit background activity, so alerts can be delayed.\n\nPlease keep real emergency contacts you can reach by other means.</string>
     <string name="disclaimer_acknowledge">I understand</string>

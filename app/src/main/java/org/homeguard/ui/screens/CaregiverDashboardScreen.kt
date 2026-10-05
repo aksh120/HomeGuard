@@ -24,12 +24,17 @@ import androidx.compose.material.icons.filled.Sensors
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -81,12 +86,77 @@ fun CaregiverDashboardScreen(
     isRefreshing: Boolean,
     loadState: CaregiverLoadState,
     lastRefreshedAt: Long?,
+    alarmRaisedFor: String? = null,
+    alarmFailure: String? = null,
     onRefresh: () -> Unit,
     onAddPerson: () -> Unit,
+    onRaiseAlarm: (WatchedPerson) -> Unit = {},
     onSubmitApprovalCode: (String) -> Unit = {},
     onDismissApprovalError: () -> Unit = {}
 ) {
     val scrollState = rememberScrollState()
+
+    // Phase 5 (decision D7): raising an alarm is destructive and outward-facing. It sounds a siren on
+    // somebody's phone at home and tells every caregiver that something is wrong, so it is confirmed
+    // first and names the person. Never a single tap on a list of several people.
+    var pendingAlarmFor by remember { mutableStateOf<WatchedPerson?>(null) }
+    var alarmSentFor by remember { mutableStateOf<String?>(null) }
+
+    // Cleared on a fresh result rather than by a dismiss callback: there is no dismiss affordance on
+    // the outcome card, so the state has to reset itself or the first card would outlive every
+    // subsequent alarm and become wallpaper.
+    LaunchedEffect(alarmRaisedFor, alarmFailure) {
+        alarmSentFor = null
+        if (alarmRaisedFor != null) {
+            alarmSentFor = alarmRaisedFor
+            pendingAlarmFor = null
+        }
+    }
+
+    pendingAlarmFor?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingAlarmFor = null },
+            title = {
+                Text(
+                    stringResource(
+                        R.string.caregiver_raise_alarm_title,
+                        target.device.displayName
+                    )
+                )
+            },
+            text = {
+                Column {
+                    Text(stringResource(R.string.caregiver_raise_alarm_body))
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        stringResource(R.string.caregiver_raise_alarm_note),
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                CyberButton(
+                    text = stringResource(R.string.caregiver_raise_alarm_confirm),
+                    onClick = {
+                        // Closed immediately rather than waiting for the round trip. The outcome card
+                        // takes over, so leaving a dialog spinning over the dashboard helps nobody.
+                        pendingAlarmFor = null
+                        onRaiseAlarm(target)
+                    },
+                    accentColor = StatusEmergency
+                )
+            },
+            dismissButton = {
+                CyberButton(
+                    text = stringResource(R.string.common_cancel),
+                    onClick = { pendingAlarmFor = null },
+                    accentColor = MaterialTheme.colorScheme.surfaceVariant,
+                    isSecondary = true
+                )
+            }
+        )
+    }
 
     val openEmergencies = remember(emergencyEvents) {
         emergencyEvents.filterNot { it.isResolved }
@@ -173,8 +243,51 @@ fun CaregiverDashboardScreen(
 
                 people.forEachIndexed { index, person ->
                     if (index > 0) Spacer(modifier = Modifier.height(12.dp))
-                    PersonCard(person)
+                    PersonCard(
+                        person = person,
+                        onRaiseAlarm = { pendingAlarmFor = person }
+                    )
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.caregiver_raise_alarm_calling),
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 21.sp
+                )
+            }
+        }
+
+        // Outcome of the last attempt. Reported rather than only logged: a caregiver who has just
+        // sounded somebody's siren needs to know whether it actually went out, and for whom.
+        alarmSentFor?.let { who ->
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberGlassCard(borderColor = StatusEmergency) {
+                Text(
+                    stringResource(R.string.caregiver_raise_alarm_sent, who),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.caregiver_alarm_ongoing),
+                    fontSize = 15.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 21.sp
+                )
+            }
+        }
+        alarmFailure?.let { failure ->
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberGlassCard(borderColor = StatusUnknown) {
+                Text(
+                    failure,
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
+                )
             }
         }
 
@@ -389,7 +502,10 @@ private fun EmergencyBanner(event: RemoteEmergencyEvent, personName: String) {
  * to different devices.
  */
 @Composable
-private fun PersonCard(person: WatchedPerson) {
+private fun PersonCard(
+    person: WatchedPerson,
+    onRaiseAlarm: () -> Unit
+) {
     val device = person.device
     val now = System.currentTimeMillis()
     val stale = device.isStale(now)
@@ -518,6 +634,22 @@ private fun PersonCard(person: WatchedPerson) {
                     lineHeight = 21.sp
                 )
             }
+        }
+
+        // Hidden entirely rather than disabled when the device cannot be alarmed. A permanently
+        // greyed-out control on every row trains people to ignore it; the state that matters is
+        // already reported in the banner above.
+        if (device.canRaiseAlarm) {
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberButton(
+                text = stringResource(
+                    R.string.caregiver_raise_alarm_for,
+                    device.displayName
+                ),
+                onClick = onRaiseAlarm,
+                accentColor = StatusEmergency,
+                icon = Icons.Default.NotificationsActive
+            )
         }
     }
 }

@@ -215,16 +215,23 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
             } else {
                 "status=eq.PENDING"
             }
+            // Phase 5: alarms share this table but are not approval requests. They must never appear
+            // here, where the resident could read one as somebody asking permission to watch them.
+            // Excluding them server-side rather than filtering the result also means an alarm cannot
+            // accidentally consume a slot in the approvals UI.
+            val kindFilter = "kind=in.(APPROVE_JOIN,APPROVE_REMOVE,APPROVE_MODE_SWITCH)"
             when (
                 val result = request(
                     "GET",
-                    "remote_commands?$statusFilter&select=*&order=created_at.desc",
+                    "remote_commands?$statusFilter&$kindFilter&select=*&order=created_at.desc",
                     null,
                     token
                 )
             ) {
                 is HttpResult.Failure -> Result.failure(result.error)
-                is HttpResult.Success -> Result.success(result.rows.map { it.toApprovalRequest() })
+                is HttpResult.Success -> Result.success(
+                    result.rows.mapNotNull { it.toApprovalRequest() }
+                )
             }
         }
 
@@ -465,15 +472,21 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
 private fun JSONObject.optStringOrNull(key: String): String? =
     if (isNull(key)) null else optString(key).takeIf { it.isNotBlank() }
 
-private fun JSONObject.toApprovalRequest(): ApprovalRequest = ApprovalRequest(
+private fun JSONObject.toApprovalRequest(): ApprovalRequest? {
+    // Defence in depth behind the server-side kind filter: an alarm shares the remote_commands table
+    // but is not a consent request, so it must never render in the approvals list.
+    val rawKind = optString("kind")
+    if (rawKind.equals(RemoteAlarmDataSource.KIND_RAISE_ALARM, ignoreCase = true)) return null
+    return ApprovalRequest(
     id = optString("id"),
-    kind = ApprovalKind.fromWire(optString("kind")) ?: ApprovalKind.APPROVE_JOIN,
+    kind = ApprovalKind.fromWire(rawKind) ?: ApprovalKind.APPROVE_JOIN,
     status = ApprovalStatus.fromWire(optString("status")) ?: ApprovalStatus.PENDING,
     approvalCode = optStringOrNull("approval_code"),
     createdAt = optString("created_at"),
     requesterName = optStringOrNull("requested_by_name").orEmpty(),
     householdId = optStringOrNull("household_id")
-)
+    )
+}
 
 private fun JSONObject.toMonitoredDevice(): MonitoredDevice {
     val status = optJSONObject("device_status")
@@ -486,6 +499,9 @@ private fun JSONObject.toMonitoredDevice(): MonitoredDevice {
         isCharging = status?.optBoolean("is_charging", false) ?: false,
         isInternetAvailable = status?.optBoolean("is_internet_available", false) ?: false,
         safetyStatus = status?.optString("safety_status").orEmpty(),
-        lastSeenAt = status?.optString("last_seen_at").orEmpty()
+        lastSeenAt = status?.optString("last_seen_at").orEmpty(),
+        // Phase 5: the alarm API addresses the person by auth UUID, not by device id.
+        userId = if (isNull("user_id")) "" else optString("user_id"),
+        householdId = if (isNull("household_id")) "" else optString("household_id")
     )
 }

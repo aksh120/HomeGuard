@@ -53,9 +53,27 @@ data class MonitoredDevice(
     val isCharging: Boolean = false,
     val isInternetAvailable: Boolean = false,
     val safetyStatus: String = "",
-    val lastSeenAt: String = ""
+    val lastSeenAt: String = "",
+    /**
+     * The owner's Supabase auth UUID, or blank when the row predates Phase 5.
+     *
+     * Phase 5 needs this, not [deviceId], to raise an alarm: `remote_commands` is keyed by auth user
+     * so the target can be identified even after a reinstall, which mints a new [deviceId]. The text
+     * device id identifies an install; the user id identifies a person.
+     */
+    val userId: String = "",
+    /**
+     * The household this device belongs to.
+     *
+     * Needed because decision D2 allows one caregiver to watch several homes, and an alarm must name
+     * the household it applies to rather than assuming whichever home was listed first.
+     */
+    val householdId: String = ""
 ) {
     val displayName: String get() = personName.ifBlank { "Protected person" }
+
+    /** Whether an alarm can be raised for this person. */
+    val canRaiseAlarm: Boolean get() = userId.isNotBlank()
 
     val hasReported: Boolean get() = lastSeenAt.isNotBlank()
 
@@ -77,6 +95,19 @@ data class MonitoredDevice(
         return nowMillis - parsed.time > staleAfterMillis
     }
 }
+
+/**
+ * An alarm a caregiver raised on someone's behalf, as the target device sees it.
+ *
+ * Deliberately small. The device needs to know who asked and which household it concerns in order to
+ * label the alarm honestly; everything else is server-side state.
+ */
+data class RemoteAlarm(
+    val id: String = "",
+    val householdId: String = "",
+    /** The caregiver that raised it. Blank means the value was not returned, not that it is unknown. */
+    val requestedBy: String = ""
+)
 
 /** An emergency raised remotely. Read-only to a caregiver. */
 data class RemoteEmergencyEvent(

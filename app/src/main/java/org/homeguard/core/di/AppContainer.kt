@@ -5,6 +5,7 @@ import org.homeguard.BuildConfig
 import org.homeguard.core.communication.CommunicationManager
 import org.homeguard.core.data.EventRepository
 import org.homeguard.core.data.MonitoringRemoteDataSource
+import org.homeguard.core.data.RemoteAlarmDataSource
 import org.homeguard.core.data.SafetyRepository
 import org.homeguard.core.data.SupabaseAuthClient
 import org.homeguard.core.data.SupabaseRemoteSyncDataSource
@@ -70,6 +71,17 @@ val authClient: SupabaseAuthClient by lazy {
 
     val monitoringRemoteDataSource: MonitoringRemoteDataSource by lazy {
         MonitoringRemoteDataSource(authClient, BuildConfig.SUPABASE_URL)
+    }
+
+    /**
+     * The caregiver-alarm channel (Phase 5).
+     *
+     * Shares [authClient] with the rest of the graph on purpose. A second client would mint a second
+     * anonymous auth user, and `claim_remote_command` is authorised against auth.uid() — so the alarm
+     * would target a household the real install is not a member of.
+     */
+    val remoteAlarmDataSource: RemoteAlarmDataSource by lazy {
+        RemoteAlarmDataSource(authClient, BuildConfig.SUPABASE_URL)
     }
 
     val syncRepository: SyncRepository by lazy {

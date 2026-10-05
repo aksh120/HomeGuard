@@ -307,6 +307,20 @@ fun ApprovalCodeEntry(
     }
 }
 
+/**
+ * Alarms are excluded upstream, in the data source.
+ *
+ * The branches below are nevertheless written explicitly rather than using an `else` branch, so that
+ * adding a new command kind later fails to compile here instead of silently borrowing somebody else's
+ * wording. Showing an alarm under "someone wants to watch this home" would be actively misleading.
+ */
+/**
+ * Exhaustive without an `else`, so a new consent-bearing kind fails to compile here instead of
+ * silently borrowing another request's wording.
+ *
+ * Alarms are not a case because they are not approvals: an alarm is filtered out of this list by the
+ * data source, and showing one under "someone wants to watch this home" would be actively misleading.
+ */
 private fun ApprovalKind.titleStringRes(): Int = when (this) {
     ApprovalKind.APPROVE_JOIN -> R.string.approvals_request_join_title
     ApprovalKind.APPROVE_REMOVE -> R.string.approvals_request_remove_title

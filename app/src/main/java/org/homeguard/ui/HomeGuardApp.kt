@@ -77,6 +77,10 @@ fun HomeGuardApp(
     val lastMonitoringRefresh by viewModel.lastMonitoringRefresh.collectAsState()
     val householdError by viewModel.householdError.collectAsState()
 
+    // Caregiver-raised alarm (Phase 5)
+    val alarmRaisedFor by viewModel.alarmRaisedFor.collectAsState()
+    val alarmFailure by viewModel.alarmFailure.collectAsState()
+
     val profile = appConfig.profile
     val isMonitoringDevice = profile == AppProfile.MONITORING
 
@@ -165,6 +169,9 @@ fun HomeGuardApp(
                     lastRefreshedAt = lastMonitoringRefresh,
                     onRefresh = viewModel::refreshMonitoring,
                     onAddPerson = { showAddPersonDialog = true },
+                    alarmRaisedFor = alarmRaisedFor,
+                    alarmFailure = alarmFailure,
+                    onRaiseAlarm = viewModel::raiseAlarmFor,
                     onSubmitApprovalCode = viewModel::submitApprovalCode,
                     onDismissApprovalError = viewModel::dismissApprovalError
                 )

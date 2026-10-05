@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.homeguard.HomeGuardApplication
+import org.homeguard.core.data.RemoteAlarmDataSource
 
 /**
  * Receives caregiver alerts while the app is backgrounded.
@@ -26,7 +27,58 @@ class HomeGuardMessagingService : FirebaseMessagingService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /**
+     * Receives a caregiver-raised alarm.
+     *
+     * Claims before alarming, never the other way round. The same command is also visible to the poll
+     * fallback in [org.homeguard.core.sync.SyncWorker], and both paths can run within seconds of each
+     * other. The claim is the single conditional update that decides which one is allowed to sound the
+     * siren; whichever loses gets nothing and quietly stops. Claiming after starting the alarm would
+     * mean the resident hears a duplicate alarm for a request that was already being handled.
+     *
+     * A losing claim is a normal outcome, not an error, and must not produce an error notification.
+     */
+    private fun handleAlarmCommand(commandId: String) {
+        val app = applicationContext as? HomeGuardApplication ?: return
+        scope.launch {
+            val claimed = app.container.remoteAlarmDataSource.claimRemoteCommand(commandId)
+            claimed
+                .onSuccess { alarm ->
+                    if (alarm == null) {
+                        Log.i(FCM_TAG, "Command $commandId was already handled; not alarming again")
+                        return@onSuccess
+                    }
+                    Log.i(FCM_TAG, "Claimed caregiver alarm $commandId; sounding the alarm")
+                    // Resolved before the service starts so the notification is never built twice with
+                    // different text, and so a slow lookup delays the siren rather than its label.
+                    val name = app.container.remoteAlarmDataSource.requesterDisplayName(
+                        alarm.householdId,
+                        alarm.requestedBy
+                    )
+                    RemoteAlarmService.start(applicationContext, alarm.id, name)
+                }
+                .onFailure {
+                    // Do not alarm blindly. An unclaimed command might belong to somebody else, and
+                    // this device has no way to tell. The poll fallback will retry it.
+                    Log.w(FCM_TAG, "Could not claim caregiver alarm $commandId", it)
+                }
+        }
+    }
+
     override fun onMessageReceived(message: RemoteMessage) {
+        // Checked before the notification path because this message deliberately carries no
+        // notification payload: the edge function sends it as data-only so the SDK does not render a
+        // generic "Emergency" headline that would misattribute a caregiver's alarm to the resident.
+        if (message.data["kind"] == RemoteAlarmDataSource.KIND_RAISE_ALARM) {
+            val commandId = message.data["command_id"].orEmpty()
+            if (commandId.isBlank()) {
+                Log.w(FCM_TAG, "Alarm command with no command id; ignoring")
+                return
+            }
+            handleAlarmCommand(commandId)
+            return
+        }
+
         val title = message.notification?.title
             ?: message.data["title"]
             ?: "HomeGuard"
@@ -73,8 +125,15 @@ class HomeGuardMessagingService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .build()
-        runCatching { manager.notify(id, notification) }
-            .onFailure { Log.w(FCM_TAG, "Could not post push notification", it) }
+        // An explicit SecurityException catch rather than runCatching: the permission can be revoked
+        // between the check above and this call, and catching that specifically is what lint requires
+        // for a guarded notify. runCatching would also swallow an unrelated RuntimeException and hide
+        // a real fault behind a log line.
+        try {
+            manager.notify(id, notification)
+        } catch (e: SecurityException) {
+            Log.w(FCM_TAG, "POST_NOTIFICATIONS was revoked before this push could be shown", e)
+        }
     }
 
     private companion object {

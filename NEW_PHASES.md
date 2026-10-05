@@ -1,6 +1,7 @@
 # HomeGuard — NEW_PHASES.md
 
-**Status:** Planning complete. Phase 0 not yet started.
+**Status:** Phases 0–5 implemented. Phase 6 remains.
+**Last updated:** 2026-10-05
 **Written:** 2026-10-04
 **Supersedes:** nothing. Complements `PHASES.md` (the original 21 build phases) and `COMPLIANCE.md`.
 
@@ -151,6 +152,11 @@ Full design in §7. This is the highest-risk item in the roadmap.
 
 *Rationale:* push is the channel that actually reaches a phone. Email is the fallback and the
 channel people trust for a record.
+
+> **Not implemented.** The edge function filters on `email_enabled !== false`, but no migration adds
+> that column and no UI sets it, so the field is always absent and the filter always passes: email is
+> currently unconditional for anyone with an address. A schema field that does not exist cannot be
+> opted out of, and reading it as if it could is worse than not having the check at all.
 
 ### D9 — Supabase stays; FCM only for push
 
@@ -615,7 +621,32 @@ HTTP 429
 
 ### Phase 3 — Approval codes
 
-**Status: done**, with one gap recorded below.
+**Status: schema, functions and both UIs exist. NOT enforced end to end — see the gaps below.**
+
+**Done when:** no membership change is possible without a code. ❌ **Not met.** Two holes remain, and
+the more serious one is in the client.
+
+**Gap 1 — joining still bypasses the approval code entirely.** `HomeViewModel.joinHousehold` calls
+`MonitoringRemoteDataSource.joinHousehold`, which POSTs straight into `household_members`, and the
+`join_household` RLS policy allows any caller to insert their own row. So anybody with a household
+invite code becomes a member immediately, which makes `APPROVE_JOIN` dead code: nothing in the app
+ever *files* one. `requestApproval` exists and the caregiver dashboard can submit a code, so both ends
+are built and neither end is connected.
+
+This also had a knock-on effect in Phase 5: a user who joined this way could immediately raise an alarm
+for the household. The `MONITORING` role check added in `20261004250000` now constrains *who* may
+alarm, but it cannot constrain a membership that was created without consent.
+
+The fix is to replace the direct insert with a request: the caregiver files `APPROVE_JOIN` naming the
+target, the resident's phone shows the code, the caregiver types it in. `approve_remote_command`
+already performs the membership insert, so only the request path needs wiring — plus removing or
+narrowing the `join_household` INSERT policy so it cannot be bypassed by a direct API call.
+
+**Gap 2 — removal and mode-switch requests are unreachable from the client.** `forgetHousehold` clears
+local state only (correctly: unilaterally deleting the row would be D6), but nothing files an
+`APPROVE_REMOVE`, so there is no way to stop watching through the UI. `APPROVE_MODE_SWITCH` has the
+same problem, as originally recorded: the schema kind, cancel path and device-side resolve policy all
+exist, but there is no UI on the resident's phone that creates the request.
 
 **Work:**
 - `remote_commands` table (migration 011) holding approval requests. Created here rather than in
@@ -623,8 +654,10 @@ HTTP 429
 - **The code is minted and checked in the database**, never by the client. The code is the entire
   consent mechanism, so a client-side comparison would mean anything able to call PostgREST could
   satisfy an approval by guessing
-- RLS: INSERT gated per kind, SELECT limited to the target device and the requester, UPDATE only the
-  target — so a requester can never mark their own request satisfied
+- RLS: INSERT gated per kind, SELECT limited to the target device, UPDATE only the target. SELECT was
+  originally "target or requester", which turned out to be a hole: PostgREST returns whole rows, so
+  the requester could read the `approval_code` minted for them and submit it themselves. Phase 5
+  migration `20261004250000` restricted SELECT to the target.
 - `approve_remote_command(code)` performs the membership change itself. The client can only present
   a code
 - `cancel_remote_command(id)` so a resident can refuse. Without it, "consent" would mean "no way to
@@ -636,16 +669,9 @@ HTTP 429
 - `ApprovalPolicy` holds the pure rules, with **no age parameter on `isAwaitingAction` by design**
   (D5). If a future change reintroduces a timeout, that signature makes it visible
 
-**Done when:** no membership change is possible without a code. ✅
-
-**Gap:** the protected → monitoring switch is *schema* ready (`APPROVE_MODE_SWITCH` kind, plus a
-`cancel_remote_command` path and the device-side `resolve_own_remote_commands` policy that lets the
-device mark it applied) but the client flow is not wired. There is currently no UI on the resident's
-phone that *creates* a switch request, so the kind is unreachable. The reverse direction
-(monitoring → protected) works and correctly needs no approval.
-
 **Risk:** medium. Four bugs were found only by executing the functions, not reading them —
-see the change log.
+see the change log. Phase 5 then found four more authorisation gaps of the same kind, which is why the
+remaining two gaps above are recorded as "not enforced" rather than "done".
 
 ### Phase 4 — FCM push
 
@@ -715,6 +741,53 @@ fails the build.
 
 ### Phase 5 — Remote SOS
 
+**Status: server side and both client paths implemented. Device delivery untested.**
+
+- Migrations `20261004230000` (schema + `request_remote_alarm`), `20261004240000` (command/emergency
+  link + `device_push_tokens`), `20261004250000` (authorisation fixes, see below). All applied.
+- `RAISE_ALARM` travels through `remote_commands` but is deliberately **not** an `ApprovalKind`: an
+  alarm carries no code and must never appear in the resident's approvals list.
+- Edge function sends the alarm as a **data-only** high-priority message carrying `command_id`. Not a
+  notification payload: the SDK would render its own title, which cannot say a caregiver asked.
+- The target device claims before alarming (`PENDING → DELIVERED`). Both the push path and the
+  `SyncWorker` poll path claim, so a push followed by a poll cannot sound the siren twice.
+- `RemoteAlarmService` is a `specialUse` foreground service with a full-screen intent, siren, torch and
+  a Stop action. It completes the command when the resident stops it.
+- Caregiver SOS lives on each person card in the dashboard, behind a confirm dialog that names them.
+- **Battery-optimisation exemption step is still outstanding.**
+
+**Four authorisation gaps were found and closed in `20261004250000`.** All four were silent — no
+error, no failed build, alarm still working — so each is recorded with what it allowed:
+
+1. `can_request_for` / `can_raise_alarm_for` tested only for shared membership, so in a house with two
+   protected devices either resident could alarm or un-watch the other. Now requires `MONITORING`.
+2. The `remote_commands` SELECT policy admitted `requested_by`, and PostgREST returns whole rows —
+   including `approval_code`. A requester could read the code minted for them and approve their own
+   request. Now restricted to the target; `cancel_approval` still exists for withdrawal.
+3. The INSERT policy allowed `RAISE_ALARM` directly, bypassing the emergency insert and the rate
+   limit. `request_remote_alarm` is `SECURITY DEFINER` and is now the only path to an alarm.
+4. The 15-minute rate limit counted only `PENDING`/`DELIVERED`, so completing an alarm let the next
+   one straight through. Now counts any `RAISE_ALARM` in the window.
+
+Also fixed there: `caregiver_push_tokens` required the caregiver's own `devices.household_id` to match,
+which is `NULL` for anyone who joined by code — so a correctly configured caregiver silently received
+no emergency push.
+
+**Done when:** caregiver SOS alerts contacts instantly and alarms the resident's phone, and is rate
+limited to one per 15 minutes.
+**Risk:** **highest in the roadmap.** **Needs the developer:** yes — two real phones, and a locked
+screen. Everything up to "FCM handed the message to a device" is verified; nothing past it is.
+
+**Verified against the live database (2026-10-05), 17 checks:**
+
+- Direct `RAISE_ALARM` insert refused; `request_remote_alarm` still works for a real caregiver.
+- Stranger cannot raise or claim an alarm. A second resident in the same home cannot raise one.
+- The 15-minute limit still applies *after* the alarm is completed.
+- The caregiver who raised an alarm cannot read its row back; the target can, and it has no code.
+- Exactly one claim succeeds; a second returns nothing; the target can complete it.
+- The emergency row carries `source = CAREGIVER_REMOTE`, `triggered_by`, and the command id.
+- All eight RPCs the app and edge function call are routable, so no manual PostgREST reload is needed.
+
 **Work:**
 - `remote_commands` + `emergency_events.source` / `triggered_by` (§6.2, §6.3)
 - RLS and the 15-minute DB-trigger rate limit (§7.2)
@@ -725,10 +798,6 @@ fails the build.
   `id`
 - Battery-optimisation exemption step
 - Resolve D-8 as a documented, guarded overrule
-
-**Done when:** caregiver SOS alerts contacts instantly and alarms the resident's phone, and is rate
-limited to one per 15 minutes.
-**Risk:** **highest in the roadmap.** **Needs the developer:** no, but expect device testing.
 
 ### Phase 6 — Polish and verification
 
@@ -813,6 +882,11 @@ NOTIFY pgrst, 'reload schema';
 Until that runs, `/rest/v1/rpc/*` returns `404 requested path is invalid`. Tables and writes are
 unaffected.
 
+**Done 2026-10-05.** Verified afterwards: `find_household_by_invite_code` 200, `approve_remote_command`
+and `create_household_with_membership` reaching their validation branches, `cancel_remote_command`
+200. The caregiver join path is live over HTTP. Repeat this NOTIFY after any migration that adds a
+function the app calls, because the CLI cannot trigger it.
+
 ### 9.4 One-time action from earlier work, still outstanding
 
 The mail password and the Resend API key were pasted into chat and shell history during earlier
@@ -837,7 +911,7 @@ Recorded so they are not rediscovered as bugs.
 | L9 | `navigation-compose` is in the version catalog but unused; routing is hand-rolled | Noted. Phase 1 works within the existing routing approach. |
 | L10 | **Migrations were in `backend/migrations/`, invisible to the Supabase CLI** | Fixed in Phase 0 by moving them to `supabase/migrations/`. `db push` had been reporting "Remote database is up to date" with nothing applied. This is the same class of mistake as the edge-function path bug fixed in `15c2c5b`. |
 | L11 | **`local.properties` held a double-escaped Supabase URL** (`https\://…`) | Found in Phase 0. Every URL built from it was malformed, so debug builds could not reach Supabase at all. Corrected after confirming the host matches `project_id` in `supabase/config.toml`. The anon key was unaffected. Worth re-checking after any tool rewrites this file, since the corruption is silent. |
-| L12 | **PostgREST's schema cache cannot be reloaded from the CLI** | Migrations 005–008 are applied and verified, but `supabase db push` and `supabase db query` both connect through the pooler, where `NOTIFY pgrst, 'reload schema'` is not delivered. Every `/rpc/` path returns `404 requested path is invalid` even though the functions exist in `pg_proc`. Tables resolve normally, so only the function schema is stale. **Needs one manual step:** run `NOTIFY pgrst, 'reload schema';` in the Supabase dashboard SQL editor (which uses a direct connection), or restart PostgREST. The caregiver join path cannot work over HTTP until this is done. Database logic was verified independently — see §8 Phase 0 verification note. |
+| L12 | **PostgREST's schema cache could not be reloaded from the CLI — RESOLVED 2026-10-05** | Migrations 005–008 were applied and verified, but `supabase db push` and `supabase db query` connect through the pooler where `NOTIFY pgrst, 'reload schema'` is not delivered, so every `/rpc/` path returned `404 requested path is invalid` while the functions existed in `pg_proc`. Resolved by running the NOTIFY once in the Supabase dashboard SQL editor, which uses a direct connection. All four RPCs verified routable afterwards. **Note for future migrations:** the cache cannot be refreshed from the CLI, so any migration adding a function or column that the app calls needs the dashboard NOTIFY before it will work over HTTP. |
 | L13 | **`households` INSERT failed under `return=representation`** | Root cause was not the policy. `INSERT ... RETURNING` is evaluated against the table's SELECT policy, which requires existing membership, so the row a user had just created was invisible to them and PostgreSQL raised 42501. Confirmed by varying only the `Prefer` header: `return=minimal` → 201, `return=representation` → 403. Fixed by creating the household and its first member in one `SECURITY DEFINER` function, where RLS does not apply to `RETURNING`. |
 | L14 | **Push delivery is configured but has never been observed working** | The Firebase client config and service account are in place and the *server* path is verified — `notify-caregiver` reports `pushConfigured: true`, which requires Google to have accepted a signed assertion. What is untested is a notification actually appearing on a real phone, because that needs two devices and a genuine SOS. Treat push as unproven until someone watches it fire. |
 | L15 | **Firebase raises the floor on `androidx.fragment`** | Firebase pulls in `androidx.fragment` 1.1.0 transitively, below the 1.3.0 that `registerForActivityResult` requires, which fails `lintVitalRelease`. Pinned explicitly to 1.8.5. Recorded because the symptom points at `MainActivity` and the cause is a push dependency, which makes it hard to find next time. |
@@ -929,3 +1003,8 @@ Plus, specific to this roadmap:
 | 2026-10-04 | Defects found by executing rather than reading the approval migrations, all now fixed: `approve_remote_command` declared an OUT parameter named `household_id` that shadowed the column (42702); `CREATE OR REPLACE` cannot change a return type (42P13); `can_request_for` collapsed to "requester is the target" so no real member could request; and it keyed on `devices.household_id` rather than membership, which also refused every first-time joiner. |
 | 2026-10-04 | Corrected an earlier claim in migration 011 that approvals cannot be spam. A join request is created by someone who is by definition not yet a member, so a stranger holding a household id could flood a resident's approvals list. Fixed with a partial unique index plus a 60-minute per-target interval. |
 | 2026-10-04 | Phase 4 code complete: `push_tokens`, FCM HTTP v1 in the edge function, `HomeGuardMessagingService`, token registration with `onNewToken`, dead-token cleanup, and the D9 notification gate. Delivery is **not** verifiable until `google-services.json` and `FCM_SERVICE_ACCOUNT` exist. Recorded L14 (release builds cannot deliver push without the config) and L15 (Firebase forces `androidx.fragment` past the Activity Result floor). |
+| 2026-10-05 | Firebase config and service account installed. PostgREST schema cache reloaded by hand after the CLI's `NOTIFY` proved to be swallowed; L12 closed. |
+| 2026-10-05 | Phase 5 server side: migrations 015 (`RAISE_ALARM`, `DELIVERED`, attribution, `request_remote_alarm`, atomic claim/complete) and 016 (`emergency_events.remote_command_id`, `device_push_tokens`) applied. |
+| 2026-10-05 | Phase 5 client: `RemoteAlarmDataSource`, `RemoteAlarmService` foreground service, claim-then-alarm in the FCM receiver, `SyncWorker` poll fallback, caregiver SOS with a name-confirming dialog. Data-only alarm message, because a notification payload would be titled by the SDK and could not say a caregiver asked. |
+| 2026-10-05 | **Four authorisation gaps found and closed** in migration 017, all silent (no error, no failed build, alarm still working): shared membership with no `MONITORING` role check, so a second resident could alarm their own household; `requested_by` in the SELECT policy, so a requester could read their own `approval_code` and self-approve; a direct `RAISE_ALARM` INSERT policy bypassing the emergency row and the rate limit; and a rate limit that only counted `PENDING`/`DELIVERED`, so a completed alarm could be immediately repeated. Also fixed `caregiver_push_tokens` requiring a `household_id` that joiners never have, which meant a correctly configured caregiver silently got no emergency push. |
+| 2026-10-05 | Corrected Phase 3's "done" status. Joining still POSTs directly into `household_members` under the permissive `join_household` policy, so an invite code grants immediate membership and `APPROVE_JOIN` is never filed by any UI. Removal and mode-switch requests are likewise unreachable. The schema and both UIs exist; the flow is not connected. |

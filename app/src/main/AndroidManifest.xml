@@ -8,9 +8,37 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!--
+      Phase 5: a caregiver-raised alarm has to sound from a locked, closed app. Nothing else is
+      sufficient: a background MediaPlayer is suspended within seconds, and the poll fallback only
+      runs every 15 minutes.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!--
+      Shows the alarm over the lock screen rather than as a silent notification. Declared but not
+      assumed: on API 34+ Android grants this only to calling/alarm-category apps or by user
+      action, and RemoteAlarmService's notification stands on its own if it is withheld.
+    -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!--
+      Android 14+ revokes WAKE_LOCK from apps that do not declare it, and without it a high-priority
+      FCM message cannot reliably wake the CPU to start the foreground service.
+    -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <!-- Flashlight torch (camera is optional so devices without rear camera still install) -->
     <uses-feature
         android:name="android.hardware.camera.flash"
+        android:required="false" />
+    <!--
+      Declared alongside the CAMERA permission. Declaring the permission without the matching
+      hardware feature makes device and store filtering assume a camera is present, which would hide
+      HomeGuard from camera-less devices and tablets — exactly the devices most likely to be sitting
+      on a kitchen wall. required="false" because the torch is an extra, not the product.
+    -->
+    <uses-feature
+        android:name="android.hardware.camera"
         android:required="false" />
     <!--
       CAMERA is requested only when the user toggles the flashlight. No microphone permission:
@@ -67,6 +95,24 @@
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
+        </service>
+
+        <!--
+          Phase 5: sounds a caregiver-raised alarm. Exported is false, so no other app can start or
+          stop it; the Stop action arrives as an explicit intent from our own notification.
+
+          specialUse rather than mediaPlayback: this is not media playback, but Android offers no
+          more accurate type for a safety alarm, and declaring the wrong one would be inaccurate too.
+        -->
+        <service
+            android:name=".core.notifications.RemoteAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Sounds a caregiver-raised safety alarm on a locked phone, where the app
+                    cannot hold a foreground activity and a background audio session would be suspended." />
         </service>
 
         <!--

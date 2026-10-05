@@ -14,13 +14,29 @@ enum class ApprovalKind {
     /** A caregiver asking to stop watching, using the same path as joining. */
     APPROVE_REMOVE,
 
-    /** Someone asking to convert this device from resident to caregiver. */
+/** Someone asking to convert this device from resident to caregiver. */
     APPROVE_MODE_SWITCH;
 
     companion object {
         fun fromWire(raw: String): ApprovalKind? =
             entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
     }
+}
+
+/**
+ * A caregiver-raised alarm, as the target device sees it.
+ *
+ * Kept separate from [ApprovalRequest] on purpose. An alarm is not a consent request: it carries no
+ * approval code, the target never approves or declines it, and it must never appear in the approvals
+ * list, where a resident could mistake it for somebody asking for access to their home.
+ */
+data class RemoteAlarmCommand(
+    val id: String = "",
+    val householdId: String? = null,
+    val requestedBy: String? = null,
+    val status: ApprovalStatus = ApprovalStatus.PENDING
+) {
+    val isPending: Boolean get() = status == ApprovalStatus.PENDING
 }
 
 /** The state of an approval request as the device shows it. */

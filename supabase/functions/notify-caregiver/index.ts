@@ -37,6 +37,12 @@ interface EmergencyEventRow {
   device_id: string;
   triggered_at: string;
   details?: string | null;
+  /** DEVICE for a resident-raised alarm, CAREGIVER_REMOTE for one a caregiver raised. */
+  source?: string | null;
+  /** Which caregiver raised it. Present only when source is CAREGIVER_REMOTE. */
+  triggered_by?: string | null;
+  /** The remote_commands row to deliver on the resident's phone, if this is a remote alarm. */
+  remote_command_id?: string | null;
 }
 
 interface DeviceRow {
@@ -97,6 +103,7 @@ async function loadRecipients(
   device: DeviceRow | null;
   contacts: ContactRow[];
   pushTokens: PushTokenRow[];
+  deviceTokens: PushTokenRow[];
 }> {
   const headers = {
     apikey: SERVICE_ROLE_KEY,
@@ -113,7 +120,7 @@ async function loadRecipients(
     return (await res.json()) as unknown[];
   };
 
-  const [devices, contacts, tokens] = await Promise.all([
+  const [devices, contacts, tokens, deviceTokens] = await Promise.all([
     read(
       `${SUPABASE_URL}/rest/v1/devices?device_id=eq.${encoded}&select=device_id,person_name,person_role&limit=1`,
       "devices"
@@ -127,12 +134,19 @@ async function loadRecipients(
       `${SUPABASE_URL}/rest/v1/rpc/caregiver_push_tokens?${new URLSearchParams({ target_device_id: deviceId }).toString()}`,
       "caregiver_push_tokens"
     ),
+    // The alarmed phone's own tokens. Needed for a caregiver-raised alarm, where the recipient is
+    // the resident's device rather than any household caregiver.
+    read(
+      `${SUPABASE_URL}/rest/v1/rpc/device_push_tokens?${new URLSearchParams({ target_device_id: deviceId }).toString()}`,
+      "device_push_tokens"
+    ),
   ]);
 
   return {
     device: (devices as DeviceRow[])[0] ?? null,
     contacts: contacts as ContactRow[],
     pushTokens: tokens as PushTokenRow[],
+    deviceTokens: deviceTokens as PushTokenRow[],
   };
 }
 
@@ -293,6 +307,47 @@ async function sendPush(
 }
 
 /**
+ * Sends the alarm command to the phone being alarmed.
+ *
+ * Deliberately a data message with no notification payload. A payload would be rendered by the SDK
+ * with a generic title, which would read as a resident-initiated emergency. The resident's own screen
+ * has to say a caregiver raised it, so the app builds the notification itself.
+ *
+ * High priority so a backgrounded phone can act inside Android's short allowance for high-priority
+ * FCM messages. Best effort: the contacts alert has already gone out by this point, so a failure here
+ * degrades the alarm rather than the emergency.
+ */
+async function sendAlarmCommand(
+  accessToken: string,
+  token: string,
+  commandId: string
+): Promise<"sent" | "failed" | "unregistered"> {
+  const projectId = FCM_PROJECT_ID || "replace-me";
+  const res = await fetch(`${FCM_ENDPOINT}/${projectId}/messages:send`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: {
+        token,
+        android: { priority: "HIGH" },
+        data: { kind: "RAISE_ALARM", command_id: commandId },
+      },
+    }),
+  });
+
+  if (res.ok) return "sent";
+  const detail = await res.text();
+  if (detail.includes("UNREGISTERED") || detail.includes("INVALID_ARGUMENT")) {
+    return "unregistered";
+  }
+  console.error("Alarm command send failed:", res.status, detail);
+  return "failed";
+}
+
+/**
  * Removes tokens FCM has declared dead.
  *
  * Without this a token that failed once is retried forever and the caregiver silently stops getting
@@ -357,8 +412,10 @@ Deno.serve(async (req: Request) => {
   }
 
     try {
-      const { device, contacts, pushTokens } = await loadRecipients(record.device_id);
+      const { device, contacts, pushTokens, deviceTokens } = await loadRecipients(record.device_id);
 
+      // A caregiver-raised alarm must never read as the resident panicking, so the wording changes.
+      const isRemoteAlarm = record.source === "CAREGIVER_REMOTE";
       const who = device?.person_name?.trim() || "Someone";
       const when = new Date(record.triggered_at).toLocaleString("en-GB", {
         dateStyle: "medium",
@@ -366,46 +423,83 @@ Deno.serve(async (req: Request) => {
         timeZone: "UTC",
       });
 
-      const subject = `HomeGuard emergency alert - ${who}`;
-      const body = [
-        `HomeGuard sent an emergency alert from the device at home.`,
-        ``,
-        `Person:     ${who}${device?.person_role ? ` (${device.person_role})` : ""}`,
-        `Triggered:  ${when} UTC`,
-        `Details:    ${record.details || "None provided"}`,
-        ``,
-        `If you believe this is a mistake, the resident can stop the alarm from the`,
-        `HomeGuard emergency screen. Otherwise please contact them or local`,
-        `emergency services now.`,
-      ].join("\n");
+      const subject = isRemoteAlarm
+        ? `HomeGuard: a caregiver raised an alarm for ${who}`
+        : `HomeGuard emergency alert - ${who}`;
+      const body = isRemoteAlarm
+        ? [
+            `A caregiver asked for help from the device at home.`,
+            ``,
+            `Person:     ${who}${device?.person_role ? ` (${device.person_role})` : ""}`,
+            `Raised at:  ${when} UTC`,
+            ``,
+            `This was NOT the resident pressing their own SOS button. A caregiver asked for`,
+            `assistance on their behalf.`,
+            ``,
+            `If nobody at home asked for this, treat it as a mistake and check with them.`,
+          ].join("\n")
+        : [
+            `HomeGuard sent an emergency alert from the device at home.`,
+            ``,
+            `Person:     ${who}${device?.person_role ? ` (${device.person_role})` : ""}`,
+            `Triggered:  ${when} UTC`,
+            `Details:    ${record.details || "None provided"}`,
+            ``,
+            `If you believe this is a mistake, the resident can stop the alarm from the`,
+            `HomeGuard emergency screen. Otherwise please contact them or local`,
+            `emergency services now.`,
+          ].join("\n");
 
       // D8: email is opt-in per contact, push always goes to every registered caregiver device.
       const withEmail = contacts.filter((c) => c.email && c.email_enabled !== false);
       const accessToken = await getGoogleAccessToken();
-      const pushTitle = `Emergency: ${who}`;
-      const pushBody = record.details?.trim() || "Emergency alert from the device at home";
+      const pushTitle = isRemoteAlarm ? `Caregiver asked for help: ${who}` : `Emergency: ${who}`;
+      const pushBody = isRemoteAlarm
+        ? `A caregiver raised an alarm for this device. It was not the resident pressing SOS.`
+        : record.details?.trim() || "Emergency alert from the device at home";
 
-      const [emailResults, pushResults] = await Promise.all([
+      const [emailResults, pushResults, alarmResults] = await Promise.all([
         Promise.all(withEmail.map((c) => sendEmail(c.email as string, subject, body))),
         accessToken && pushTokens.length > 0
           ? Promise.all(
               pushTokens.map((t) => sendPush(accessToken, t.token, pushTitle, pushBody))
             )
           : Promise.resolve([] as ("sent" | "failed" | "unregistered")[]),
+        // The alarm itself goes to the resident's own phone. Requires both the command id and a
+        // token; without either the contacts alert above is still the safety net.
+        accessToken && isRemoteAlarm && record.remote_command_id && deviceTokens.length > 0
+          ? Promise.all(
+              deviceTokens.map((t) =>
+                sendAlarmCommand(accessToken, t.token, record.remote_command_id as string)
+              )
+            )
+          : Promise.resolve([] as ("sent" | "failed" | "unregistered")[]),
       ]);
 
       const sent = emailResults.filter(Boolean).length;
       const pushed = pushResults.filter((r) => r === "sent").length;
+      const alarmsSent = alarmResults.filter((r) => r === "sent").length;
       const deadTokens = pushTokens
         .filter((_, i) => pushResults[i] === "unregistered")
         .map((t) => t.token);
       if (deadTokens.length > 0) await deleteDeadTokens(deadTokens);
 
       console.log(
-        `Notified ${sent}/${withEmail.length} contact(s) by email and ` +
-          `${pushed}/${pushTokens.length} caregiver device(s) by push ` +
+        `Notified ${sent}/${withEmail.length} contact(s) by email, ` +
+          `${pushed}/${pushTokens.length} caregiver device(s) by push, ` +
+          `${alarmsSent}/${deviceTokens.length} alarmed device(s) ` +
           `for device ${record.device_id}`
       );
+
+      // The alarm failing is worth an explicit warning: the resident's contacts were told, but
+      // nobody at home heard anything, which is the case a caregiver would be alarmed to discover.
+      if (isRemoteAlarm && alarmsSent === 0) {
+        console.warn(
+          `Caregiver-raised alarm did not reach the device itself ` +
+            `(command=${record.remote_command_id ?? "none"}, tokens=${deviceTokens.length}). ` +
+            `Contacts were notified; the phone alarm may rely on the poll fallback.`
+        );
+      }
 
       // Contacts with a phone but no email are logged rather than silently dropped, so the
       // limitation is visible to whoever is debugging.
@@ -435,6 +529,10 @@ Deno.serve(async (req: Request) => {
         total: withEmail.length,
         pushed,
         pushTotal: pushTokens.length,
+        alarmsSent,
+        alarmTotal: deviceTokens.length,
+        isRemoteAlarm,
+        remoteCommandId: record.remote_command_id ?? null,
         pushConfigured: Boolean(accessToken),
         smsPending: smsOnly.length,
         deviceFound: device !== null,
@@ -443,6 +541,8 @@ Deno.serve(async (req: Request) => {
         reason:
           sent > 0 || pushed > 0
             ? null
+            : isRemoteAlarm
+            ? "a caregiver alarm was recorded but no contact or token could be notified"
             : contacts.length === 0 && pushTokens.length === 0
             ? "no monitoring contact configured for this device"
             : accessToken
