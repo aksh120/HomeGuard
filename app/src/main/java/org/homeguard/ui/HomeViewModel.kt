@@ -29,13 +29,16 @@ import org.homeguard.core.hardware.BatteryInfo
 import org.homeguard.core.model.AppConfig
 import org.homeguard.core.model.AppProfile
 import org.homeguard.core.model.ApprovalKind
+import org.homeguard.core.model.ApprovalOutcome
 import org.homeguard.core.model.ApprovalRequest
 import org.homeguard.core.model.CaregiverAggregator
 import org.homeguard.core.model.DeviceMode
 import org.homeguard.core.model.Household
 import org.homeguard.core.model.HouseholdMember
 import org.homeguard.core.model.HouseholdRef
+import org.homeguard.core.model.JoinRequestOutcome
 import org.homeguard.core.model.MonitoredDevice
+import org.homeguard.core.model.MyRemoteRequest
 import org.homeguard.core.model.RemoteCheckIn
 import org.homeguard.core.model.RemoteEmergencyEvent
 import org.homeguard.core.model.SafetyStatus
@@ -588,8 +591,76 @@ fun switchToProtectedProfile() {
     private val _lastMonitoringRefresh = MutableStateFlow<Long?>(null)
     val lastMonitoringRefresh: StateFlow<Long?> = _lastMonitoringRefresh.asStateFlow()
 
+    /**
+     * The household just asked about, so the join screen can say "waiting for N people" rather than
+     * simply closing. Held here rather than in the dialog because the dialog is dismissed immediately.
+     */
+    private val _pendingJoinNotice = MutableStateFlow<JoinRequestOutcome?>(null)
+    val pendingJoinNotice: StateFlow<JoinRequestOutcome?> = _pendingJoinNotice.asStateFlow()
+
     private val _householdError = MutableStateFlow<String?>(null)
     val householdError: StateFlow<String?> = _householdError.asStateFlow()
+
+    /**
+     * Asks to turn this phone from a home device into a monitoring device.
+     *
+     * The codes appear on the dashboards of the people currently watching, so this only reports that
+     * the request was filed. The local profile does not change here: it changes when the client later
+     * observes that the server has moved this device to MONITORING_DEVICE.
+     *
+     * The error is its own state rather than the shared approval error, which is rendered on the
+     * caregiver dashboard. Sharing it would make this failure invisible to the one person who can act
+     * on it, and a refused consent request that looks like it worked is the worst possible outcome.
+     */
+    fun requestModeSwitch() {
+        viewModelScope.launch {
+            _modeSwitchError.value = null
+            container.monitoringRemoteDataSource.requestModeSwitch()
+                .onSuccess { _modeSwitchRequested.value = true }
+                .onFailure {
+                    _modeSwitchRequested.value = false
+                    _modeSwitchError.value = when {
+                        it.message.orEmpty().contains("nobody is watching", ignoreCase = true) ->
+                            getString(R.string.switch_to_monitoring_not_watching)
+                        it.message.orEmpty().contains("already asked", ignoreCase = true) ->
+                            getString(R.string.monitor_setup_ask_pending)
+                        else -> {
+                            val detail = it.message.orEmpty()
+                            getString(
+                                R.string.switch_to_monitoring_failed,
+                                detail.ifBlank {
+                                    getString(R.string.switch_to_monitoring_failed_generic)
+                                }
+                            )
+                        }
+                    }
+                }
+        }
+    }
+
+    private val _modeSwitchRequested = MutableStateFlow(false)
+    val modeSwitchRequested: StateFlow<Boolean> = _modeSwitchRequested.asStateFlow()
+
+    private val _modeSwitchError = MutableStateFlow<String?>(null)
+    val modeSwitchError: StateFlow<String?> = _modeSwitchError.asStateFlow()
+
+    /**
+     * Requests this install filed, and their state.
+     *
+     * Read from a SECURITY DEFINER function rather than the table, because the requester may not read
+     * their own remote_commands row: it contains the approval code. This is also the single source of
+     * truth for "still waiting"; a local cache of pending joins would be a second thing to keep in step
+     * with the server, and the two would disagree the moment an approval completed on another device.
+     */
+    private val _myRequests = MutableStateFlow<List<MyRemoteRequest>>(emptyList())
+    val myRequests: StateFlow<List<MyRemoteRequest>> = _myRequests.asStateFlow()
+
+    fun refreshMyRequests() {
+        viewModelScope.launch {
+            container.monitoringRemoteDataSource.listMyRequests()
+                .onSuccess { _myRequests.value = it }
+        }
+    }
 
     /**
      * Creates a household and links this device into it, publishing the invite code.
@@ -640,10 +711,12 @@ fun switchToProtectedProfile() {
     }
 
     /**
-     * Joins an existing household using the code shown on the home device.
+     * Asks to watch a household using its invite code.
      *
-     * Phase 2: also the "add another person" path. Joining a second code must add to the list
-     * rather than replace the only one, which is the whole point of decision D2.
+     * Phase 2: also the "add another person" path. Phase 3 changed what it *means*: this no longer
+     * joins. It files a request that stays inert until somebody at home reads out an approval code, so
+     * the household is remembered locally to show progress but the dashboard stays empty until the
+     * membership actually exists.
      */
     fun joinHousehold(inviteCode: String) {
         viewModelScope.launch {
@@ -657,34 +730,45 @@ fun switchToProtectedProfile() {
                 _isRefreshingMonitoring.value = false
                 return@launch
             }
-            remote.findHouseholdByCode(normalised)
-                .onSuccess { household ->
-                    val deviceId = preferencesManager.ensureDeviceId()
-                    remote.joinHousehold(household.id, deviceId, "MONITORING")
-                        .onFailure {
-                            // Already a member is fine; anything else is not.
-                            if (!it.message.orEmpty().contains("duplicate", ignoreCase = true)) {
-                                _householdError.value = it.message
-                            }
-                        }
-                    rememberHousehold(household)
-                    refreshMonitoring()
+            val deviceId = preferencesManager.ensureDeviceId()
+            remote.requestHouseholdJoin(normalised, deviceId)
+                .onSuccess { outcome ->
+                    // Nothing is remembered locally and nothing is visible remotely yet. The dashboard
+                    // reads its "waiting" state from list_my_remote_commands, so a code completed on
+                    // another device shows up here on the next refresh instead of going stale.
+                    _pendingJoinNotice.value = outcome
+                    refreshMyRequests()
                 }
-                .onFailure {
-                    _householdError.value = it.message ?: "Could not connect"
-                }
+                .onFailure { _householdError.value = it.message }
             _isRefreshingMonitoring.value = false
+            refreshMonitoring()
         }
     }
 
     /**
-     * Stops watching a household.
+     * Asks to stop watching a household.
      *
-     * Removing membership is a Phase 3 approval flow on the protected phone, so this only clears
-     * local state. The remote membership row is left in place deliberately: unilaterally deleting
-     * it here would bypass the consent check Phase 3 adds.
+     * Nothing is forgotten locally until the request completes, so a refused request leaves the
+     * dashboard as it was. Previously this only cleared local state and left the membership in place,
+     * which meant there was no way to actually leave.
      */
     fun forgetHousehold(householdId: String) {
+        viewModelScope.launch {
+            _householdError.value = null
+            container.monitoringRemoteDataSource.requestHouseholdLeave(householdId)
+                .onSuccess { refreshMonitoring() }
+                .onFailure { _householdError.value = it.message }
+        }
+    }
+
+    /**
+     * Drops a remembered household without asking anybody.
+     *
+     * Only ever removes the local record. The membership row stays until a resident's code is typed,
+     * because deleting it unilaterally would be D6 in reverse: a resident must not be able to vanish
+     * from somebody's watch list without their consent.
+     */
+    fun hideHouseholdLocally(householdId: String) {
         viewModelScope.launch {
             preferencesManager.removeHousehold(householdId)
             _households.value = preferencesManager.householdsFlow.first()
@@ -827,9 +911,6 @@ fun switchToProtectedProfile() {
     private val _approvalError = MutableStateFlow<String?>(null)
     val approvalError: StateFlow<String?> = _approvalError.asStateFlow()
 
-    private val _approvalResult = MutableStateFlow<ApprovalKind?>(null)
-    val approvalResult: StateFlow<ApprovalKind?> = _approvalResult.asStateFlow()
-
     /**
      * Caregivers currently watching this household.
      *
@@ -852,19 +933,31 @@ fun switchToProtectedProfile() {
     /**
      * Submits an approval code on behalf of the caregiver who is watching.
      *
-     * The membership change happens in the database; this only presents the code.
+     * The membership change happens in the database; this only presents the code. A code is often not
+     * the last one, so a partial result is reported as such rather than as success.
      */
     fun submitApprovalCode(code: String) {
         viewModelScope.launch {
             _approvalError.value = null
             container.monitoringRemoteDataSource.submitApprovalCode(code)
-                .onSuccess { kind ->
-                    _approvalResult.value = kind
+                .onSuccess { outcome ->
+                    _approvalOutcome.value = outcome
+                    // The membership is gone server-side only once the last code has been entered, so
+                    // this is the one point at which dropping the local record cannot lose access.
+                    if (outcome.completed && outcome.kind == ApprovalKind.APPROVE_REMOVE) {
+                        hideHouseholdLocally(
+                            _households.value.firstOrNull()?.id.orEmpty()
+                        )
+                    }
                     refreshMonitoring()
+                    refreshMyRequests()
                 }
                 .onFailure { _approvalError.value = it.message }
         }
     }
+
+    private val _approvalOutcome = MutableStateFlow<ApprovalOutcome?>(null)
+    val approvalOutcome: StateFlow<ApprovalOutcome?> = _approvalOutcome.asStateFlow()
 
     /** Withdraws a pending request. Without this the resident could not refuse one. */
     fun cancelApproval(request: ApprovalRequest) {
@@ -881,7 +974,7 @@ fun switchToProtectedProfile() {
     }
 
     fun dismissApprovalResult() {
-        _approvalResult.value = null
+        _approvalOutcome.value = null
     }
 
     override fun onCleared() {

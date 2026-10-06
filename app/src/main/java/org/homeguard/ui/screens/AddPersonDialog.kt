@@ -23,11 +23,15 @@ import androidx.compose.ui.unit.sp
 import org.homeguard.R
 
 /**
- * Adds another person to a caregiver's dashboard by invite code (decision D2).
+ * Asks to watch another home using its invite code (decisions D2 and D4).
  *
  * Deliberately only a code field. One house is one code and every person in it is already listed,
  * so the only thing a caregiver can legitimately add is another house's code. Offering anything
  * else here would suggest per-person sharing exists, and it does not.
+ *
+ * The wording says "ask", not "connect", because that is what it now does. Somebody at home has to
+ * read out an approval code before anything is shared, and a button labelled Connect would promise
+ * access this dialog cannot deliver.
  *
  * Dismisses without a callback on cancel, so an abandoned dialog cannot clear an existing error.
  */
@@ -99,7 +103,7 @@ fun AddPersonDialog(
                 enabled = code.length == 8 && !isJoining
             ) {
                 Text(
-                    text = stringResource(R.string.monitor_setup_join),
+                    text = stringResource(R.string.monitor_setup_ask),
                     fontSize = 16.sp
                 )
             }

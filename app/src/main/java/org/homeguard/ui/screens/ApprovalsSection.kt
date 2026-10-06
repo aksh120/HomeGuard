@@ -143,8 +143,15 @@ private fun WatchersCard(watchers: List<HouseholdMember>) {
  * The code is large and spaced because it is read aloud or copied into a message, which is the whole
  * consent step. No button here grants access: the resident cannot approve from their own phone.
  */
+/**
+ * One pending request, with the code to read out.
+ *
+ * Not private: a caregiver is also a *target* of requests, because a resident can ask them to agree
+ * to that phone changing role. Both sides therefore need to display a code, not only enter one, and
+ * duplicating this card for the caregiver would let the two drift apart.
+ */
 @Composable
-private fun ApprovalRequestCard(
+fun ApprovalRequestCard(
     request: ApprovalRequest,
     onDecline: () -> Unit
 ) {

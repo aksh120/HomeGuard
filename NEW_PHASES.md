@@ -621,32 +621,95 @@ HTTP 429
 
 ### Phase 3 — Approval codes
 
-**Status: schema, functions and both UIs exist. NOT enforced end to end — see the gaps below.**
+**Status: enforced. Migrations 018, 019, 020, 021, 030 applied and verified against the live database.**
 
-**Done when:** no membership change is possible without a code. ❌ **Not met.** Two holes remain, and
-the more serious one is in the client.
+**Done when:** no membership change is possible without a code. ✅ **Met**, as of 2026-10-05.
 
-**Gap 1 — joining still bypasses the approval code entirely.** `HomeViewModel.joinHousehold` calls
-`MonitoringRemoteDataSource.joinHousehold`, which POSTs straight into `household_members`, and the
-`join_household` RLS policy allows any caller to insert their own row. So anybody with a household
-invite code becomes a member immediately, which makes `APPROVE_JOIN` dead code: nothing in the app
-ever *files* one. `requestApproval` exists and the caregiver dashboard can submit a code, so both ends
-are built and neither end is connected.
+### What "enforced" meant, and why Phase 3 previously was not
 
-This also had a knock-on effect in Phase 5: a user who joined this way could immediately raise an alarm
-for the household. The `MONITORING` role check added in `20261004250000` now constrains *who* may
-alarm, but it cannot constrain a membership that was created without consent.
+Phase 3 built the whole mechanism and left the door open next to it. `join_household` — an INSERT
+policy permitting any caller to add their own `household_members` row — is what `joinHousehold`
+actually called. So holding an invite code made somebody a member immediately, `APPROVE_JOIN` was
+never filed by any screen, and removal had no UI at all. The approval code was documentation.
 
-The fix is to replace the direct insert with a request: the caregiver files `APPROVE_JOIN` naming the
-target, the resident's phone shows the code, the caregiver types it in. `approve_remote_command`
-already performs the membership insert, so only the request path needs wiring — plus removing or
-narrowing the `join_household` INSERT policy so it cannot be bypassed by a direct API call.
+Nothing about this fails visibly. The dashboard renders, the code round-trips, and a direct call to
+`approve_remote_command` does exactly what it claims. That is why the gap survived four phases and a
+working test suite.
 
-**Gap 2 — removal and mode-switch requests are unreachable from the client.** `forgetHousehold` clears
-local state only (correctly: unilaterally deleting the row would be D6), but nothing files an
-`APPROVE_REMOVE`, so there is no way to stop watching through the UI. `APPROVE_MODE_SWITCH` has the
-same problem, as originally recorded: the schema kind, cancel path and device-side resolve policy all
-exist, but there is no UI on the resident's phone that creates the request.
+### The fix
+
+Membership rows are now created and deleted in exactly one place: `approve_remote_command(code)`,
+`SECURITY DEFINER`, matched server-side. There is no INSERT, UPDATE or DELETE policy left on
+`household_members`, and no INSERT policy left on `remote_commands`. Each flow gets a function that
+takes only the credential the requester genuinely holds:
+
+| Flow | Credential | Function |
+|---|---|---|
+| Watch a home | the invite code | `request_household_join(code, device_id)` |
+| Stop watching | membership of a home | `request_household_leave(household_id)` |
+| Change what this phone is | membership of a home | `request_mode_switch()` |
+
+The client learns no household id and no user id when asking. It used to resolve the code itself and
+POST its own row, which meant the database never checked that the caller held the code at all.
+
+### One approval per resident, not per household
+
+Membership is household-wide: `devices` and `emergency_events` are both readable by any member, so a
+new member sees every person's check-ins and alerts in that home. With two people at home, one of them
+approving would silently expose the other's medical details — which is why D3 is all-or-nothing in
+the first place. So every `PROTECTED` member gets their own request, and `approve_remote_command`
+counts: the membership change happens only when the **whole group** has executed. A veto cancels the
+remainder.
+
+Leaving is deliberately asymmetric: it needs **one** approval, not unanimity. Requiring everybody to
+consent before a caregiver may stop watching would let one person trap a watcher in a household they
+want to leave. Withdrawing access is the protective direction.
+
+The role is derived from `devices.device_mode`, never from the request body. A caller-supplied role
+would let anybody request `PROTECTED` without a resident's approval, which is the caregiver gate with
+the sign swapped. This is also what restored the second resident: dropping the insert policy initially
+left a household unable to hold two protected devices at all, because `create_household_with_membership`
+enrols only the creator.
+
+### Verified against the live database (28 checks)
+
+- Direct `household_members` insert refused, and the household does not grow.
+- A request cannot be filed by naming a target and a household.
+- The invite code files a request and is **not** membership.
+- A requester sees their own requests with exactly six columns, none of them a code.
+- Two residents produce two distinct codes; one code is **not** enough; the last reports complete.
+- Membership then appears, with the joiner's device id and role derived from their device.
+- A spent code cannot be replayed.
+- Asking to leave does not remove; one code removes; the rest of the group is settled, not orphaned.
+- A mode switch is refused when nobody is watching, shows its code to the *approver*, and only then
+  flips the resident's device.
+- All twelve RPCs the client calls are routable.
+
+### Defects found only by executing it
+
+The same pattern as migrations 012 and 013, in a fourth location:
+
+1. `request_household_join` raised `42P01` on **every** call — `FOR member IN SELECT ... member.user_id`
+   is field access on a scalar, which PL/pgSQL parses as a table alias. Joining was broken for
+   everybody, not just one case. Rewritten as `INSERT ... SELECT`, which removes the loop variable
+   rather than fixing its type.
+2. `request_mode_switch` had the identical loop bug and could never be requested. Migration 019's
+   verification checked three of the four request functions and missed it. The check now enumerates
+   all four, because a partial enumeration reads as coverage.
+3. The join throttle counted requests **per target**, so the first person to ask a resident locked
+   every other person out for an hour. Keyed on `(target, requester)`, matching the pending-join index.
+4. `approve_remote_command` executed on the *first* code, granting membership while the second
+   resident's request sat pending forever. Migration 018's comment claimed all-or-nothing consent; the
+   code did not deliver it. A comment that overstates what the code does is worse than none.
+
+### Remaining known gap
+
+A resident's phone is switched to `MONITORING_DEVICE` server-side, but the local profile preference
+that drives navigation is not yet reconciled from it on next launch. Until that is wired, the switch
+is recorded and consented to correctly but the app still opens on the resident experience.
+
+**Gap closed:** none outstanding for Phase 3. The client no longer writes `household_members` or
+`remote_commands` at all.
 
 **Work:**
 - `remote_commands` table (migration 011) holding approval requests. Created here rather than in
@@ -1008,3 +1071,6 @@ Plus, specific to this roadmap:
 | 2026-10-05 | Phase 5 client: `RemoteAlarmDataSource`, `RemoteAlarmService` foreground service, claim-then-alarm in the FCM receiver, `SyncWorker` poll fallback, caregiver SOS with a name-confirming dialog. Data-only alarm message, because a notification payload would be titled by the SDK and could not say a caregiver asked. |
 | 2026-10-05 | **Four authorisation gaps found and closed** in migration 017, all silent (no error, no failed build, alarm still working): shared membership with no `MONITORING` role check, so a second resident could alarm their own household; `requested_by` in the SELECT policy, so a requester could read their own `approval_code` and self-approve; a direct `RAISE_ALARM` INSERT policy bypassing the emergency row and the rate limit; and a rate limit that only counted `PENDING`/`DELIVERED`, so a completed alarm could be immediately repeated. Also fixed `caregiver_push_tokens` requiring a `household_id` that joiners never have, which meant a correctly configured caregiver silently got no emergency push. |
 | 2026-10-05 | Corrected Phase 3's "done" status. Joining still POSTs directly into `household_members` under the permissive `join_household` policy, so an invite code grants immediate membership and `APPROVE_JOIN` is never filed by any UI. Removal and mode-switch requests are likewise unreachable. The schema and both UIs exist; the flow is not connected. |
+| 2026-10-05 | **Phase 3 enforced.** Migrations 018, 019, 020, 021 and 030. All INSERT/UPDATE/DELETE policies dropped from `household_members` and all INSERT from `remote_commands`; membership changes now happen only inside `approve_remote_command(code)`. Added `request_household_join`, `request_household_leave`, `request_mode_switch`, `list_my_remote_commands`, `protected_members_of`, `is_monitoring_member_of`. The client joins, leaves and switches through those functions and no longer writes membership at all. 28 live-database checks, 169 unit tests, lint clean, both builds green. |
+| 2026-10-05 | Four defects found by executing the new functions, all fixed in follow-up migrations. `request_household_join` raised `42P01` on every call (field access on a scalar loop variable, which PL/pgSQL parses as a table alias) so joining was broken entirely, not just in one case; `request_mode_switch` had the same bug and 019's verification missed it by enumerating three of four functions; the join throttle was keyed on target alone, so the first requester locked every other person out for an hour; and `approve_remote_command` granted membership on the first code, leaving the second resident's request pending forever — which contradicted the all-or-nothing consent that 018's comment claimed. |
+| 2026-10-05 | Fixed a side effect of closing the door: dropping the insert policy left a household unable to hold a second protected device, because `create_household_with_membership` enrols only the creator. The joiner's role is now derived from `devices.device_mode` at approval time rather than taken from the request body, which restores second residents and keeps the caregiver gate closed. |

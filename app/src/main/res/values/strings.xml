@@ -197,6 +197,35 @@
     <string name="approvals_submit_code">Confirm</string>
     <string name="approvals_joined">You can now watch this home.</string>
     <string name="approvals_removed">You have stopped watching this home.</string>
+    <string name="approvals_partial">%1$d more person(s) at home must agree before this takes effect.</string>
+    <string name="approvals_decline_notice">If they decline, nothing changes.</string>
+    <string name="approvals_caregiver_note">These are codes for somebody else to read out or send you. Nothing happens until you enter the code they give you.</string>
+
+    <!-- Code-gated joining, leaving and switching (D4 enforced) -->
+    <string name="monitor_setup_ask">Ask to watch</string>
+    <string name="monitor_setup_ask_sent">Asked to watch %1$s. %2$d person(s) at home must agree before you can see anything.</string>
+    <string name="monitor_setup_ask_pending">You have already asked to watch this home. Still waiting for a code.</string>
+    <string name="monitor_setup_ask_failed">Could not send the request: %1$s</string>
+    <string name="caregiver_waiting_heading">Waiting for approval</string>
+    <string name="caregiver_waiting_body">You have asked to watch %1$s. You cannot see this home yet. Somebody at home has to read you an approval code.</string>
+    <string name="caregiver_waiting_approvals">%1$d person(s) at home still have to agree.</string>
+    <string name="caregiver_waiting_none">You are not waiting for anybody.</string>
+    <string name="caregiver_stop_watching">Stop watching this home</string>
+    <string name="caregiver_stop_watching_title">Stop watching %1$s?</string>
+    <string name="caregiver_stop_watching_body">You will lose access to their safety status, alerts and emergency history. Somebody at home has to read you an approval code, and nothing changes until they do.</string>
+    <string name="caregiver_stop_watching_confirm">Ask to stop</string>
+    <string name="caregiver_stop_watching_sent">Asked to stop watching %1$s. You still have access until somebody at home agrees.</string>
+    <string name="caregiver_stop_watching_failed">Could not send the request: %1$s</string>
+    <string name="switch_to_monitoring_ask">This phone will now watch someone else</string>
+    <string name="switch_to_monitoring_sent_label">Waiting for the people watching this home to agree</string>
+    <string name="switch_to_monitoring_sent_notice">They have to agree on their own phone. This phone keeps protecting them until they do.</string>
+    <string name="switch_to_monitoring_title">Change what this phone does?</string>
+    <string name="switch_to_monitoring_body">The people currently watching this home will be asked to agree. Until they do, this phone keeps protecting them as normal.</string>
+    <string name="switch_to_monitoring_confirm">Ask to change</string>
+    <string name="switch_to_monitoring_sent">Asked. %1$d person(s) watching this home must agree before this phone changes.</string>
+    <string name="switch_to_monitoring_not_watching">Nobody is watching this home, so there is nothing to ask permission for.</string>
+    <string name="switch_to_monitoring_failed">Could not send the request: %1$s</string>
+    <string name="switch_to_monitoring_failed_generic">Could not send the request. Please try again.</string>
 
     <!-- Push notifications gate (Phase 4, decision D9) -->
     <string name="push_gate_title">Turn on notifications</string>
@@ -232,7 +261,7 @@
 
     <!-- Caregiver onboarding -->
     <string name="monitor_setup_title">Connect to a home device</string>
-    <string name="monitor_setup_body">Enter the invite code shown on the HomeGuard device at home. You will see its safety status and any alerts, but you cannot trigger anything on it.</string>
+    <string name="monitor_setup_body">Enter the invite code shown on the HomeGuard device at home. The people who live there will be asked to let you watch it, and nothing is shared until they agree.</string>
     <string name="monitor_setup_code_label">Invite code</string>
     <string name="monitor_setup_code_hint">8 characters</string>
     <string name="monitor_setup_join">Connect</string>

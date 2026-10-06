@@ -24,6 +24,56 @@ enum class ApprovalKind {
 }
 
 /**
+ * The result of typing an approval code.
+ *
+ * [completed] is the field that matters. A join with two people at home needs two codes, and the
+ * first one grants nothing. Reporting that as a plain success would tell the caregiver they now have
+ * access when they do not, which is the exact shape of bug D4 exists to prevent.
+ */
+data class ApprovalOutcome(
+    val kind: ApprovalKind = ApprovalKind.APPROVE_JOIN,
+    val completed: Boolean = false,
+    /** People who still have to agree before this takes effect. 0 once it has. */
+    val approvalsRequired: Int = 0
+) {
+    val isPartiallyApproved: Boolean get() = !completed && approvalsRequired > 0
+}
+
+/** What [org.homeguard.core.data.MonitoringRemoteDataSource.requestHouseholdJoin] filed. */
+data class JoinRequestOutcome(
+    val householdId: String = "",
+    val householdName: String = "",
+    /** Raw server value. Read [approvalsRequired] instead; this is only the input. */
+    private val reportedApprovals: Int = 1
+) {
+    /**
+     * How many people must read out a code before access is granted. Never below one.
+     *
+     * Coerced in the model rather than at the call site, so no construction path can produce a
+     * request that reads as self-approved. A count of zero is precisely the shape of the bypass this
+     * whole change closed: a caregiver holding an invite code and needing nobody's agreement.
+     */
+    val approvalsRequired: Int get() = maxOf(1, reportedApprovals)
+}
+
+/**
+ * One request this install filed, as the requester may see it.
+ *
+ * Never carries the approval code: the requester is not the person who reads it out, and migration
+ * 017 exists because a requester could once read it straight out of the table.
+ */
+data class MyRemoteRequest(
+    val id: String = "",
+    val kind: ApprovalKind = ApprovalKind.APPROVE_JOIN,
+    val status: ApprovalStatus = ApprovalStatus.PENDING,
+    val createdAt: String = "",
+    val householdName: String = "",
+    val targetName: String = ""
+) {
+    val isPending: Boolean get() = status == ApprovalStatus.PENDING
+}
+
+/**
  * A caregiver-raised alarm, as the target device sees it.
  *
  * Kept separate from [ApprovalRequest] on purpose. An alarm is not a consent request: it carries no

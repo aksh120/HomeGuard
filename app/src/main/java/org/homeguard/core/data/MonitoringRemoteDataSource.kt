@@ -4,12 +4,15 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.homeguard.core.model.ApprovalKind
+import org.homeguard.core.model.ApprovalOutcome
 import org.homeguard.core.model.ApprovalPolicy
 import org.homeguard.core.model.ApprovalRequest
 import org.homeguard.core.model.ApprovalStatus
 import org.homeguard.core.model.Household
 import org.homeguard.core.model.HouseholdMember
+import org.homeguard.core.model.JoinRequestOutcome
 import org.homeguard.core.model.MonitoredDevice
+import org.homeguard.core.model.MyRemoteRequest
 import org.homeguard.core.model.RemoteCheckIn
 import org.homeguard.core.model.RemoteEmergencyEvent
 import org.json.JSONArray
@@ -83,11 +86,15 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
     }
 
     /**
-     * Resolves an invite code to a household.
+     * Resolves an invite code to a household, for showing a name before asking to watch it.
      *
      * Uses the find_household_by_invite_code RPC rather than reading `households` directly. The
      * direct read is impossible by construction: the SELECT policy requires existing membership, and
      * a prospective caregiver has none. That made joining unreachable regardless of client code.
+     *
+     * Note this resolves a code to a household for any caller who holds it, and is not used to
+     * establish membership. request_household_join does its own resolution internally, so nothing
+     * about joining depends on this being reachable.
      *
      * The code is the credential here, so a miss returns the same message whether the code is wrong
      * or belongs to a household that no longer exists.
@@ -118,31 +125,109 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
         }
 
     /**
-     * Joins the caller to a household.
+     * Asks to watch a household, using the invite code as the only credential.
      *
-     * The `join_household` insert policy permits only rows whose user_id matches the caller, so
-     * this cannot be used to enrol somebody else.
+     * Replaces a direct insert into household_members, which is now refused by the database. That
+     * insert made anybody holding an invite code a member immediately, which meant the approval code
+     * could never be the thing that grants access.
+     *
+     * The client deliberately learns nothing here except how many people must agree: no household id,
+     * no user ids. The code is the credential, so it is also the only thing sent.
      */
-    suspend fun joinHousehold(
-        householdId: String,
-        deviceId: String,
-        role: String
-    ): Result<Unit> = withContext(Dispatchers.IO) {
+    suspend fun requestHouseholdJoin(
+        inviteCode: String,
+        deviceId: String
+    ): Result<JoinRequestOutcome> = withContext(Dispatchers.IO) {
         val token = authClient.accessToken()
             ?: return@withContext Result.failure(RemoteNotConfiguredException())
-        val userId = authClient.currentUserId()
-        if (userId.isBlank()) {
-            return@withContext Result.failure(IllegalStateException("No active session"))
-        }
         val body = JSONObject().apply {
-            put("household_id", householdId)
-            put("user_id", userId)
-            put("device_id", deviceId)
-            put("role", role)
+            put("submitted_code", MonitoringRemoteDataSource.normaliseInviteCode(inviteCode))
+            put("joiner_device_id", deviceId)
         }
-        when (val result = request("POST", "household_members", body.toString(), token)) {
+        when (val result = request("POST", "rpc/request_household_join", body.toString(), token)) {
             is HttpResult.Failure -> Result.failure(result.error)
-            is HttpResult.Success -> Result.success(Unit)
+            is HttpResult.Success -> {
+                val row = result.rows.firstOrNull()
+                    ?: return@withContext Result.failure(
+                        IllegalStateException("The request was accepted but nothing came back")
+                    )
+                Result.success(
+                    JoinRequestOutcome(
+                        householdId = row.optString("household_id"),
+                        householdName = row.optString("household_name"),
+                        reportedApprovals = row.optInt("approvals_required", 1)
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Asks to stop watching a household.
+     *
+     * Clears nothing locally on its own: the local record is only dropped once the resident's code has
+     * been entered, so a refused request leaves the dashboard exactly as it was.
+     */
+    suspend fun requestHouseholdLeave(householdId: String): Result<Int> =
+        withContext(Dispatchers.IO) {
+            val token = authClient.accessToken()
+                ?: return@withContext Result.failure(RemoteNotConfiguredException())
+            val body = JSONObject().apply { put("target_household", householdId) }
+            when (
+                val result = request(
+                    "POST",
+                    "rpc/request_household_leave",
+                    body.toString(),
+                    token
+                )
+            ) {
+                is HttpResult.Failure -> Result.failure(result.error)
+                is HttpResult.Success ->
+                    Result.success(result.rows.firstOrNull()?.optInt("approvals_required", 1) ?: 1)
+            }
+        }
+
+    /**
+     * Asks to turn this phone from a home device into a monitoring device.
+     *
+     * Consent comes from the people currently watching, so the codes appear on their dashboards, not
+     * here. Nothing changes locally until the request completes.
+     */
+    suspend fun requestModeSwitch(): Result<Int> = withContext(Dispatchers.IO) {
+        val token = authClient.accessToken()
+            ?: return@withContext Result.failure(RemoteNotConfiguredException())
+        when (val result = request("POST", "rpc/request_mode_switch", "{}", token)) {
+            is HttpResult.Failure -> Result.failure(result.error)
+            is HttpResult.Success ->
+                Result.success(result.rows.firstOrNull()?.optInt("approvals_required", 1) ?: 1)
+        }
+    }
+
+    /**
+     * Requests this install filed, and their state.
+     *
+     * Reads a SECURITY DEFINER function rather than the table, because migration 017 removed
+     * `requested_by` from the SELECT policy: the requester may not read their own row, since the row
+     * contains the approval code. This returns the state without the code.
+     */
+    suspend fun listMyRequests(): Result<List<MyRemoteRequest>> = withContext(Dispatchers.IO) {
+        val token = authClient.accessToken()
+            ?: return@withContext Result.failure(RemoteNotConfiguredException())
+        when (val result = request("GET", "rpc/list_my_remote_commands", null, token)) {
+            is HttpResult.Failure -> Result.failure(result.error)
+            is HttpResult.Success -> Result.success(
+                result.rows.map {
+                    MyRemoteRequest(
+                        id = it.optString("id"),
+                        kind = ApprovalKind.fromWire(it.optString("kind")) ?: ApprovalKind.APPROVE_JOIN,
+                        status = ApprovalStatus.fromWire(it.optString("status"))
+                            ?: ApprovalStatus.CANCELLED,
+                        createdAt = it.optString("created_at"),
+                        householdName = it.optString("household_name"),
+                        targetName = it.optString("target_name")
+                    )
+                }
+            )
         }
     }
 
@@ -162,43 +247,12 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
     }
 
     // --- approval requests (phase 3, decision D4) --------------------------------------------
-
-    /**
-     * Files a request that needs a code typed before it takes effect.
-     *
-     * The code itself is minted by the database and returned to the target device only, so a requester
-     * can never satisfy their own request.
-     */
-    suspend fun requestApproval(
-        targetUserId: String,
-        householdId: String?,
-        kind: ApprovalKind
-    ): Result<Unit> = withContext(Dispatchers.IO) {
-        val token = authClient.accessToken()
-            ?: return@withContext Result.failure(RemoteNotConfiguredException())
-        val requesterId = authClient.currentUserId()
-        if (requesterId.isBlank()) {
-            return@withContext Result.failure(IllegalStateException("No active session"))
-        }
-        val body = JSONObject().apply {
-            put("target_user_id", targetUserId)
-            householdId?.let { put("household_id", it) }
-            put("kind", kind.name)
-            put("requested_by", requesterId)
-        }
-        when (
-            val result = request(
-                "POST",
-                "remote_commands",
-                body.toString(),
-                token,
-                prefer = "return=minimal"
-            )
-        ) {
-            is HttpResult.Failure -> Result.failure(result.error)
-            is HttpResult.Success -> Result.success(Unit)
-        }
-    }
+    //
+    // There is deliberately no requestApproval() here any more. It inserted straight into
+    // remote_commands, which the database now refuses, and nothing ever called it: every UI screen
+    // that needed a request used requestHouseholdJoin or requestModeSwitch instead. Filing a request
+    // naming an arbitrary target and household was also a way to fill a stranger's approvals screen
+    // without holding their invite code.
 
     /**
      * Approval requests addressed to this install.
@@ -240,8 +294,13 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
      *
      * The membership change is performed by the database function, not here. This client cannot
      * approve anything by itself, only present a code.
+     *
+     * A code is rarely the last one. With two people at home, a join produces two codes, and typing
+     * the first records that person has agreed without granting anything yet. The outcome carries
+     * [ApprovalOutcome.completed] and how many are still outstanding so the UI can say "one more" rather
+     * than showing a success the user does not yet have.
      */
-    suspend fun submitApprovalCode(code: String): Result<ApprovalKind> = withContext(Dispatchers.IO) {
+    suspend fun submitApprovalCode(code: String): Result<ApprovalOutcome> = withContext(Dispatchers.IO) {
         val token = authClient.accessToken()
             ?: return@withContext Result.failure(RemoteNotConfiguredException())
         val normalised = ApprovalPolicy.normaliseCode(code)
@@ -261,15 +320,22 @@ suspend fun createHousehold(name: String, deviceId: String): Result<Household> =
         ) {
             is HttpResult.Failure -> Result.failure(result.error)
             is HttpResult.Success -> {
-                val raw = result.rows.firstOrNull()?.optString("approved_kind")
+                val row = result.rows.firstOrNull()
                     ?: return@withContext Result.failure(
                         IllegalStateException("Approval returned no result")
                     )
+                val raw = row.optString("approved_kind")
                 val kind = ApprovalKind.fromWire(raw)
                     ?: return@withContext Result.failure(
                         IllegalStateException("Unknown approval type: $raw")
                     )
-                Result.success(kind)
+                Result.success(
+                    ApprovalOutcome(
+                        kind = kind,
+                        completed = row.optBoolean("completed", false),
+                        approvalsRequired = row.optInt("approvals_required", 0).coerceAtLeast(0)
+                    )
+                )
             }
         }
     }

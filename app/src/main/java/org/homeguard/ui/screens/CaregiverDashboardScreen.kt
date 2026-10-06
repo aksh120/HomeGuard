@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
@@ -47,10 +48,14 @@ import org.homeguard.R
 import org.homeguard.core.designsystem.theme.StatusEmergency
 import org.homeguard.core.designsystem.theme.StatusSafe
 import org.homeguard.core.designsystem.theme.StatusUnknown
+import org.homeguard.core.model.ApprovalOutcome
+import org.homeguard.core.model.ApprovalPolicy
 import org.homeguard.core.model.CaregiverActivity
 import org.homeguard.core.model.CaregiverAggregator
 import org.homeguard.core.model.ApprovalRequest
 import org.homeguard.core.model.HouseholdMember
+import org.homeguard.core.model.HouseholdRef
+import org.homeguard.core.model.MyRemoteRequest
 import org.homeguard.core.model.RemoteCheckIn
 import org.homeguard.core.model.RemoteEmergencyEvent
 import org.homeguard.core.model.SafetyStatus
@@ -76,6 +81,7 @@ import java.util.Locale
 @Composable
 fun CaregiverDashboardScreen(
     householdName: String,
+    households: List<HouseholdRef> = emptyList(),
     people: List<WatchedPerson>,
     members: List<HouseholdMember>,
     approvals: List<ApprovalRequest> = emptyList(),
@@ -88,9 +94,13 @@ fun CaregiverDashboardScreen(
     lastRefreshedAt: Long?,
     alarmRaisedFor: String? = null,
     alarmFailure: String? = null,
+    myRequests: List<MyRemoteRequest> = emptyList(),
+    approvalOutcome: ApprovalOutcome? = null,
     onRefresh: () -> Unit,
     onAddPerson: () -> Unit,
     onRaiseAlarm: (WatchedPerson) -> Unit = {},
+    onStopWatching: (String) -> Unit = {},
+    onDeclineApproval: (ApprovalRequest) -> Unit = {},
     onSubmitApprovalCode: (String) -> Unit = {},
     onDismissApprovalError: () -> Unit = {}
 ) {
@@ -101,6 +111,7 @@ fun CaregiverDashboardScreen(
     // first and names the person. Never a single tap on a list of several people.
     var pendingAlarmFor by remember { mutableStateOf<WatchedPerson?>(null) }
     var alarmSentFor by remember { mutableStateOf<String?>(null) }
+    var showStopWatching by remember { mutableStateOf(false) }
 
     // Cleared on a fresh result rather than by a dismiss callback: there is no dismiss affordance on
     // the outcome card, so the state has to reset itself or the first card would outlive every
@@ -259,7 +270,61 @@ fun CaregiverDashboardScreen(
             }
         }
 
-        // Outcome of the last attempt. Reported rather than only logged: a caregiver who has just
+        // Requests this caregiver filed that have not been agreed yet. Shown because the join is now a
+        // request: without somewhere to see "waiting for approval", a successful code entry would look
+        // exactly like a failure, since the dashboard legitimately stays empty.
+        val myPendingRequests = remember(myRequests) { myRequests.filter { it.isPending } }
+
+        // Codes other people have to be given. A caregiver is the target of a mode-switch request
+        // from a resident, so they have to display a code rather than only type one.
+        val pendingApprovals = remember(approvals) {
+            approvals.filter { ApprovalPolicy.isAwaitingAction(it) }
+        }
+
+        myPendingRequests.forEach { request ->
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberGlassCard(borderColor = StatusUnknown) {
+                Text(
+                    text = stringResource(R.string.caregiver_waiting_heading),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(
+                        R.string.caregiver_waiting_body,
+                        request.householdName.ifBlank { stringResource(R.string.caregiver_default_household) }
+                    ),
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    lineHeight = 23.sp
+                )
+            }
+        }
+
+        pendingApprovals.forEachIndexed { index, request ->
+            if (index > 0) Spacer(modifier = Modifier.height(12.dp))
+            ApprovalRequestCard(request = request, onDecline = { onDeclineApproval(request) })
+        }
+
+        approvalOutcome?.let { outcome ->
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberGlassCard(borderColor = if (outcome.completed) StatusSafe else StatusUnknown) {
+                Text(
+                    text = if (outcome.completed) {
+                        stringResource(R.string.approvals_joined)
+                    } else {
+                        stringResource(R.string.approvals_partial, outcome.approvalsRequired)
+                    },
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 22.sp
+                )
+            }
+        }
+
+        // Outcome of the last alarm. Reported rather than only logged: a caregiver who has just
         // sounded somebody's siren needs to know whether it actually went out, and for whom.
         alarmSentFor?.let { who ->
             Spacer(modifier = Modifier.height(12.dp))
@@ -300,6 +365,54 @@ fun CaregiverDashboardScreen(
             accentColor = MaterialTheme.colorScheme.primary,
             icon = Icons.Default.PersonAdd
         )
+
+        // Stopping is the other half of D4 and previously had no route at all. Confirmed, and worded
+        // as a request rather than a switch, because nothing is removed until a resident agrees.
+        if (people.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(10.dp))
+            CyberButton(
+                text = stringResource(R.string.caregiver_stop_watching),
+                onClick = { showStopWatching = true },
+                accentColor = MaterialTheme.colorScheme.surfaceVariant,
+                isSecondary = true,
+                icon = Icons.AutoMirrored.Filled.Logout
+            )
+        }
+
+        if (showStopWatching) {
+            AlertDialog(
+                onDismissRequest = { showStopWatching = false },
+                title = {
+                    Text(
+                        stringResource(
+                            R.string.caregiver_stop_watching_title,
+                            households.firstOrNull { it.hasName }?.name
+                                ?: stringResource(R.string.caregiver_default_household)
+                        )
+                    )
+                },
+                text = { Text(stringResource(R.string.caregiver_stop_watching_body)) },
+                confirmButton = {
+                    CyberButton(
+                        text = stringResource(R.string.caregiver_stop_watching_confirm),
+                        onClick = {
+                            showStopWatching = false
+                            val target = households.firstOrNull()?.id.orEmpty()
+                            if (target.isNotBlank()) onStopWatching(target)
+                        },
+                        accentColor = StatusEmergency
+                    )
+                },
+                dismissButton = {
+                    CyberButton(
+                        text = stringResource(R.string.common_cancel),
+                        onClick = { showStopWatching = false },
+                        accentColor = MaterialTheme.colorScheme.surfaceVariant,
+                        isSecondary = true
+                    )
+                }
+            )
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

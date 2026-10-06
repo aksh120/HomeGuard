@@ -81,6 +81,13 @@ fun HomeGuardApp(
     val alarmRaisedFor by viewModel.alarmRaisedFor.collectAsState()
     val alarmFailure by viewModel.alarmFailure.collectAsState()
 
+    // Code-gated requests (Phase 3 enforcement)
+    val myRequests by viewModel.myRequests.collectAsState()
+    val approvalOutcome by viewModel.approvalOutcome.collectAsState()
+    val modeSwitchRequested by viewModel.modeSwitchRequested.collectAsState()
+    val modeSwitchError by viewModel.modeSwitchError.collectAsState()
+    val pendingJoinNotice by viewModel.pendingJoinNotice.collectAsState()
+
     val profile = appConfig.profile
     val isMonitoringDevice = profile == AppProfile.MONITORING
 
@@ -143,6 +150,8 @@ fun HomeGuardApp(
             MonitorJoinScreen(
                 isJoining = isRefreshingMonitoring,
                 errorMessage = householdError,
+                requestedHouseholdName = pendingJoinNotice?.householdName?.takeIf { it.isNotBlank() },
+                approvalsRequired = pendingJoinNotice?.approvalsRequired ?: 0,
                 onJoin = viewModel::joinHousehold,
                 onDismissError = viewModel::dismissHouseholdError,
                 onSwitchToProtected = { viewModel.switchToProtectedProfile() }
@@ -157,6 +166,7 @@ fun HomeGuardApp(
                     // label. Falls back to a localised default when a house has no name yet.
                     householdName = households.firstOrNull { it.hasName }?.name
                         ?: stringResource(R.string.caregiver_default_household),
+                    households = households,
                     people = watchedPeople,
                     members = householdMembers,
                     approvals = approvals,
@@ -167,11 +177,21 @@ fun HomeGuardApp(
                     isRefreshing = isRefreshingMonitoring,
                     loadState = caregiverLoadState,
                     lastRefreshedAt = lastMonitoringRefresh,
-                    onRefresh = viewModel::refreshMonitoring,
+                    onRefresh = {
+                        viewModel.refreshMonitoring()
+                        // A caregiver is also a *target* of requests: a resident can ask them to agree
+                        // to that phone changing role, so they need codes to display, not only enter.
+                        viewModel.refreshApprovals()
+                        viewModel.refreshMyRequests()
+                    },
                     onAddPerson = { showAddPersonDialog = true },
                     alarmRaisedFor = alarmRaisedFor,
                     alarmFailure = alarmFailure,
+                    myRequests = myRequests,
+                    approvalOutcome = approvalOutcome,
                     onRaiseAlarm = viewModel::raiseAlarmFor,
+                    onStopWatching = viewModel::forgetHousehold,
+                    onDeclineApproval = viewModel::cancelApproval,
                     onSubmitApprovalCode = viewModel::submitApprovalCode,
                     onDismissApprovalError = viewModel::dismissApprovalError
                 )
@@ -225,7 +245,10 @@ fun HomeGuardApp(
                     safetyNoticeVisible = safetyNoticeVisible,
                     approvals = approvals,
                     watchers = watchers,
+                    modeSwitchRequested = modeSwitchRequested,
+                    modeSwitchError = modeSwitchError,
                     onDeclineApproval = viewModel::cancelApproval,
+                    onRequestModeSwitch = viewModel::requestModeSwitch,
                     onCheckInClick = { viewModel.confirmCheckIn() },
                     onEmergencyClick = { viewModel.startEmergencyCountdown() },
                     onCallPrimaryClick = { viewModel.initiateCallToPrimary(context) },

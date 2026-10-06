@@ -50,6 +50,8 @@ import org.homeguard.ui.components.CyberTopAppBar
 fun MonitorJoinScreen(
     isJoining: Boolean,
     errorMessage: String?,
+    requestedHouseholdName: String? = null,
+    approvalsRequired: Int = 0,
     onJoin: (String) -> Unit,
     onDismissError: () -> Unit,
     onSwitchToProtected: () -> Unit
@@ -125,12 +127,40 @@ fun MonitorJoinScreen(
             }
         }
 
+        // The request was filed but grants nothing yet, so this is the only place the caregiver learns
+        // what happens next. Without it the screen looks unchanged and a successful request is
+        // indistinguishable from a failed one.
+        if (requestedHouseholdName != null) {
+            Spacer(modifier = Modifier.height(12.dp))
+            CyberGlassCard {
+                Text(
+                    text = stringResource(
+                        R.string.monitor_setup_ask_sent,
+                        requestedHouseholdName,
+                        approvalsRequired
+                    ),
+                    fontSize = 16.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    lineHeight = 23.sp
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         CyberButton(
-            text = stringResource(R.string.monitor_setup_join),
+            text = stringResource(R.string.monitor_setup_ask),
             onClick = { onJoin(code) },
             enabled = code.length == 8 && !isJoining
+        )
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = stringResource(R.string.approvals_caregiver_note),
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 21.sp
         )
 
         if (isJoining) {

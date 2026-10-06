@@ -55,6 +55,7 @@ import org.homeguard.core.designsystem.theme.ActionEmergency
 import org.homeguard.core.designsystem.theme.ActionPrimary
 import org.homeguard.core.designsystem.theme.ActionWarning
 import org.homeguard.core.designsystem.theme.StatusEmergency
+import org.homeguard.ui.components.CyberButton
 
 /**
  * Protected-device home screen.
@@ -79,7 +80,10 @@ fun ProtectedHomeScreen(
     safetyNoticeVisible: Boolean,
     approvals: List<ApprovalRequest> = emptyList(),
     watchers: List<HouseholdMember> = emptyList(),
+    modeSwitchRequested: Boolean = false,
+    modeSwitchError: String? = null,
     onDeclineApproval: (ApprovalRequest) -> Unit = {},
+    onRequestModeSwitch: () -> Unit = {},
     onCheckInClick: () -> Unit,
     onEmergencyClick: () -> Unit,
     onCallPrimaryClick: () -> Unit,
@@ -139,6 +143,45 @@ fun ProtectedHomeScreen(
             watchers = watchers,
             onDecline = onDeclineApproval
         )
+
+        // The reverse of the monitoring-to-protected switch, which needs nobody's permission because it
+        // only ever increases what this phone can do. Turning a home device into a monitoring one ends
+        // the protection somebody is relying on, so it is a request, and the codes appear on the
+        // dashboards of the people currently watching.
+        Spacer(modifier = Modifier.height(12.dp))
+        CyberButton(
+            text = stringResource(
+                if (modeSwitchRequested) {
+                    R.string.switch_to_monitoring_sent_label
+                } else {
+                    R.string.switch_to_monitoring_ask
+                }
+            ),
+            onClick = onRequestModeSwitch,
+            accentColor = MaterialTheme.colorScheme.surfaceVariant,
+            isSecondary = true
+        )
+
+        // Shown next to the button rather than on the caregiver dashboard, because this is a request
+        // the resident makes. A refusal here has to be visible to them or the button looks inert.
+        if (modeSwitchRequested) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.switch_to_monitoring_sent_notice),
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 21.sp
+            )
+        }
+        if (modeSwitchError != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = modeSwitchError,
+                fontSize = 15.sp,
+                color = MaterialTheme.colorScheme.error,
+                lineHeight = 21.sp
+            )
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
